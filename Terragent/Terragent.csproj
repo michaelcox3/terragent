@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Absolute because tMLMod.targets lives in the Steam install, not beside the
        source. tModLoader's own template assumes the project sits under ModSources
-       inside that install; this project lives in the repository and is reached
-       through a directory junction, so the relative path would not resolve.
+       inside that install; this project lives in the repository, so the relative path
+       would not resolve. Since tModLoader v2025.01 building it there is enough for the
+       game to find it, and a link under ModSources only makes it appear twice.
        Override with -p:tMLTargets=<path>, or with TMODLOADER_INSTALL_PATH= in
        the repo's .env, on another machine. -->
   <PropertyGroup>

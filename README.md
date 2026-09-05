@@ -24,10 +24,10 @@ dotnet build Terragent
 builds the mod and writes the package into tModLoader's `Mods` directory. It fails
 while tModLoader is running, because the game holds the package open.
 
-tModLoader's in-game Mod Sources menu lists only projects that sit inside its own
-`ModSources` directory. If you want to build or reload from in game, link this
-repository's `Terragent` folder in there, with a directory junction on Windows or a
-symlink elsewhere. The command line build does not need it.
+Building it once is also what puts it in tModLoader's in-game Develop Mods menu, which
+is where Build, Reload and Publish live. Since tModLoader v2025.01 the project does not
+have to sit inside `ModSources` and does not want a link in there: a link is a second
+path to the same project, and the menu then lists it twice.
 
 To run unattended, `Terragent/Tests/launch.ps1 "<flag>"` writes the flag, starts the
 game and clicks past the no-audio panel; the game plays and exits. The flag picks what
