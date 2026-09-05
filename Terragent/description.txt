@@ -1,0 +1,7 @@
+﻿An autonomous agent that plays Terraria using classical AI: A* pathfinding, goal
+graphs and behaviour trees. It drives your own character, so you watch it play in
+the normal client.
+
+Client side only. It changes nothing for other players.
+
+Source and issues: https://github.com/michaelcox3/terragent

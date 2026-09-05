@@ -1,0 +1,38 @@
+{
+  "spills": [
+    {
+      "tile": "Trees",
+      "item": "Wood"
+    },
+    {
+      "tile": "Stone",
+      "item": "StoneBlock"
+    },
+    {
+      "tile": "Dirt",
+      "item": "DirtBlock"
+    },
+    {
+      "tile": "Pots",
+      "item": "Glowstick",
+      "note": "Terraria has no table for what a pot holds: it is a chain of ifs in WorldGen.KillTile, keyed on depth and biome, and ItemDropsDB only answers for NPCs and grab bags. So this is our claim rather than the game's, and it is a chance rather than a certainty: nothing here says how often, and the agent will break pots until it has enough. It is the only source of glowsticks underground, and a glowstick is the only light that works under water."
+    }
+  ],
+  "requires": [
+    { "tile": "Chlorophyte", "pick": 200 },
+    { "tile": "Adamantite", "pick": 210 },
+    { "tile": "Titanium", "pick": 210 },
+    { "tile": "Mythril", "pick": 110 },
+    { "tile": "Orichalcum", "pick": 110 },
+    { "tile": "Cobalt", "pick": 100 },
+    { "tile": "Palladium", "pick": 100 },
+    { "tile": "Hellstone", "pick": 65 },
+    { "tile": "Ebonstone", "pick": 65 },
+    { "tile": "Crimstone", "pick": 65 },
+    { "tile": "Pearlstone", "pick": 65 },
+    { "tile": "Obsidian", "pick": 55 },
+    { "tile": "Meteorite", "pick": 50 },
+    { "tile": "Demonite", "pick": 55, "belowSurfaceOnly": true },
+    { "tile": "Crimtane", "pick": 55, "belowSurfaceOnly": true }
+  ]
+}

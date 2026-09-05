@@ -1,0 +1,45 @@
+# Build output
+bin/
+obj/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Project-specific
+# Terraria world saves and captures are large and/or machine-specific.
+*.wld
+*.wld.bak
+*.plr
+captures/
+traces/
+logs/
+
+# Decompiler output. Regenerable from a local game install (see NOTICE.md), and
+# it is game source, so it must never be committed.
+#
+# This used to be a blanket `*.cs`, which was safe while AD-1 forbade us writing any
+# C# at all. AD-1 was reversed on 2026-08-28 and the agent *is* C# now, so a blanket
+# rule silently excluded the entire mod: `dotnet build` succeeded, the game ran it,
+# and none of it was under version control. Ignore where decompiled source lands
+# instead of ignoring the language.
+decomp/
+**/decompiled/
+*.decompiled.cs
+
+# Local scratch
+scratch/
+*.out
+
+# Machine-specific paths. See .env.example.
+.env
+
+# AI tooling and local design notes, never part of the repo
+.claude/
+CLAUDE.md
+.cursor/
+*.local.json
+docs/
+plans/

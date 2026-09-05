@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# The mod itself cannot build here: it imports tMLMod.targets out of a tModLoader
+# install, and no runner has one. The unit tests can, because they compile only the
+# files that name no Terraria type and take Point, Rectangle and Vector2 from MonoGame.
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Unit tests
+        run: dotnet test Tests/Terragent.UnitTests --verbosity minimal

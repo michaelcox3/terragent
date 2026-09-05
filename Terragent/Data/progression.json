@@ -1,0 +1,325 @@
+{
+  "nodes": [
+    {
+      "key": "starting_tools",
+      "kind": "Milestone",
+      "label": "Starting tools",
+      "requires": [],
+      "effort": 0.0
+    },
+    {
+      "key": "wood",
+      "kind": "Item",
+      "label": "Gather Wood",
+      "requires": [
+        "starting_tools"
+      ],
+      "item": "Wood",
+      "count": 100,
+      "effort": 2.0,
+      "note": "About ten trees. A bench is ten, a furnace wants four and three torches, arrows are one wood for five, and every one of those errands used to send the agent back to the treeline mid-recipe. Cutting a stack up front is one walk instead of six."
+    },
+    {
+      "key": "torch",
+      "kind": "Item",
+      "label": "Torch",
+      "requires": [
+        "wood"
+      ],
+      "item": "Torch",
+      "count": 1,
+      "keeps": [
+        "torch_1"
+      ],
+      "effort": 1.0,
+      "note": "One torch, held, is a lamp, and a lit cell is a revealed cell, so this is the difference between an agent that can see what it is standing in and one that is blind. It carries the supply that keeps it that way, because a standing requirement cannot be the thing that gets itself started: as a requirement and nothing else it worked only while restocking stopped everything until it was met, and competing with the rest of the board it loses every tick underground, where no gel walks past. The run this was written for went down for iron with none, read Unknown for every cell, swung seventy nine times at a hole it had already dug and wrote the tile off as too hard for the pickaxe."
+    },
+    {
+      "key": "bow",
+      "kind": "Item",
+      "label": "Wooden Bow",
+      "requires": [
+        "torch"
+      ],
+      "item": "WoodenBow",
+      "keeps": [
+        "arrows",
+        "glowsticks"
+      ],
+      "effort": 0.5,
+      "note": "Demon Eyes fly and a Copper Shortsword reaches 26px, so a melee-only agent holds position waiting for something that hovers. Finishing it starts the arrows, with the first five already made: running dry mid-fight is what a bow is for."
+    },
+    {
+      "key": "iron_or_lead_pickaxe",
+      "kind": "Item",
+      "label": "Iron or Lead Pickaxe",
+      "requires": [
+        "torch"
+      ],
+      "any": [
+        "IronPickaxe",
+        "LeadPickaxe"
+      ],
+      "effort": 6.0,
+      "note": "Pick power 35: the gate on Ebonstone and Crimstone."
+    },
+    {
+      "key": "silver_or_tungsten_pickaxe",
+      "kind": "Item",
+      "label": "Silver or Tungsten Pickaxe",
+      "requires": [
+        "iron_or_lead_pickaxe"
+      ],
+      "any": [
+        "SilverPickaxe",
+        "TungstenPickaxe"
+      ],
+      "effort": 7.0,
+      "note": "Pick power 45 and 50. Worth the detour on the way to gold because the ore is in the same band as the iron.",
+      "keeps": [
+        "torch_2"
+      ]
+    },
+    {
+      "key": "gold_or_platinum_pickaxe",
+      "kind": "Item",
+      "label": "Gold or Platinum Pickaxe",
+      "requires": [
+        "silver_or_tungsten_pickaxe"
+      ],
+      "any": [
+        "GoldPickaxe",
+        "PlatinumPickaxe"
+      ],
+      "effort": 8.0,
+      "note": "Pick power 55 and 59: the last of the pre-boss picks, and the one that makes going deep cheap.",
+      "keeps": [
+        "torch_3"
+      ]
+    },
+    {
+      "key": "gold_or_platinum_bow",
+      "kind": "Item",
+      "label": "Gold or Platinum Bow",
+      "requires": [
+        "gold_or_platinum_pickaxe",
+        "bow"
+      ],
+      "any": [
+        "GoldBow",
+        "PlatinumBow"
+      ],
+      "effort": 2.0
+    },
+    {
+      "key": "gold_or_platinum_sword",
+      "kind": "Item",
+      "label": "Gold or Platinum Broadsword",
+      "requires": [
+        "gold_or_platinum_pickaxe"
+      ],
+      "any": [
+        "GoldBroadsword",
+        "PlatinumBroadsword"
+      ],
+      "effort": 2.0
+    },
+    {
+      "key": "gold_or_platinum_axe",
+      "kind": "Item",
+      "label": "Gold or Platinum Axe",
+      "requires": [
+        "gold_or_platinum_pickaxe"
+      ],
+      "any": [
+        "GoldAxe",
+        "PlatinumAxe"
+      ],
+      "effort": 2.0
+    },
+    {
+      "key": "gold_or_platinum_helmet",
+      "kind": "Item",
+      "label": "Gold or Platinum Helmet",
+      "requires": [
+        "gold_or_platinum_pickaxe"
+      ],
+      "any": [
+        "GoldHelmet",
+        "PlatinumHelmet"
+      ],
+      "effort": 2.0,
+      "note": "A full set is the difference between surviving the Eye and being flown into. Each piece is its own craft, so each is its own node: the run can be wearing two of them and still be short the third."
+    },
+    {
+      "key": "gold_or_platinum_chainmail",
+      "kind": "Item",
+      "label": "Gold or Platinum Chainmail",
+      "requires": [
+        "gold_or_platinum_pickaxe"
+      ],
+      "any": [
+        "GoldChainmail",
+        "PlatinumChainmail"
+      ],
+      "effort": 2.0
+    },
+    {
+      "key": "gold_or_platinum_greaves",
+      "kind": "Item",
+      "label": "Gold or Platinum Greaves",
+      "requires": [
+        "gold_or_platinum_pickaxe"
+      ],
+      "any": [
+        "GoldGreaves",
+        "PlatinumGreaves"
+      ],
+      "effort": 2.0
+    },
+    {
+      "key": "life_crystals",
+      "kind": "Item",
+      "label": "15 Life Crystals",
+      "requires": [
+        "iron_or_lead_pickaxe"
+      ],
+      "item": "LifeCrystal",
+      "count": 15,
+      "effort": 8.0
+    },
+    {
+      "key": "lens",
+      "kind": "Item",
+      "label": "6 Lenses",
+      "requires": [
+        "gold_or_platinum_pickaxe"
+      ],
+      "item": "Lens",
+      "count": 6,
+      "when": "Night",
+      "source": "DemonEye",
+      "note": "Demon Eyes are a night-only surface spawn: NPC.SpawnNPC's surface branch returns inside if (!Main.dayTime)."
+    },
+    {
+      "key": "suspicious_eye",
+      "kind": "Item",
+      "label": "Suspicious Looking Eye",
+      "requires": [
+        "lens"
+      ],
+      "item": "SuspiciousLookingEye",
+      "effort": 0.5
+    },
+    {
+      "key": "eoc",
+      "kind": "Boss",
+      "label": "Eye of Cthulhu",
+      "requires": [
+        "suspicious_eye",
+        "gold_or_platinum_helmet",
+        "gold_or_platinum_chainmail",
+        "gold_or_platinum_greaves"
+      ],
+      "effort": 10.0,
+      "when": "Night",
+      "note": "Player.ItemCheck summons NPC 4 only inside if (!Main.IsItDay())."
+    },
+    {
+      "key": "evil_ore",
+      "kind": "Item",
+      "label": "Demonite or Crimtane",
+      "requires": [
+        "eoc",
+        "iron_or_lead_pickaxe"
+      ],
+      "item": "DemoniteOre",
+      "count": 30,
+      "effort": 6.0
+    },
+    {
+      "key": "evil_boss",
+      "kind": "Boss",
+      "label": "Eater of Worlds or Brain of Cthulhu",
+      "requires": [
+        "evil_ore"
+      ],
+      "effort": 14.0
+    },
+    {
+      "key": "shadow_scale",
+      "kind": "Item",
+      "label": "Shadow Scales or Tissue Samples",
+      "requires": [
+        "evil_boss"
+      ],
+      "item": "ShadowScale",
+      "count": 20,
+      "effort": 2.0
+    },
+    {
+      "key": "evil_pickaxe",
+      "kind": "Item",
+      "label": "Nightmare or Deathbringer Pickaxe",
+      "requires": [
+        "shadow_scale"
+      ],
+      "item": "NightmarePickaxe",
+      "effort": 1.0,
+      "note": "Pick power 65: the gate on Hellstone."
+    },
+    {
+      "key": "hellstone",
+      "kind": "Item",
+      "label": "Hellstone",
+      "requires": [
+        "evil_pickaxe"
+      ],
+      "item": "Hellstone",
+      "count": 60,
+      "effort": 20.0,
+      "note": "The Underworld, with lava."
+    },
+    {
+      "key": "molten_pickaxe",
+      "kind": "Item",
+      "label": "Molten Pickaxe",
+      "requires": [
+        "hellstone"
+      ],
+      "item": "MoltenPickaxe",
+      "effort": 2.0
+    },
+    {
+      "key": "molten_armor",
+      "kind": "Item",
+      "label": "Molten Armor",
+      "requires": [
+        "hellstone"
+      ],
+      "item": "MoltenHelmet",
+      "effort": 3.0
+    },
+    {
+      "key": "voodoo_doll",
+      "kind": "Item",
+      "label": "Guide Voodoo Doll",
+      "requires": [
+        "hellstone"
+      ],
+      "item": "GuideVoodooDoll",
+      "effort": 6.0,
+      "source": "VoodooDemon"
+    },
+    {
+      "key": "wall_of_flesh",
+      "kind": "Boss",
+      "label": "Wall of Flesh",
+      "requires": [
+        "voodoo_doll",
+        "molten_armor"
+      ],
+      "effort": 25.0
+    }
+  ]
+}

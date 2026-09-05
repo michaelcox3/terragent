@@ -1,0 +1,12 @@
+# An unused private member fails the build. Not a style preference: three dead methods
+# survived a hand search of this repo because grep counts mentions in comments and the
+# compiler counts calls.
+#
+# It only reaches PRIVATE members. Nothing built in can flag an unused public one,
+# since another assembly might call it, and CA1811, which claims to cover internal, is an
+# unported FxCop rule that silently does nothing. So narrow visibility as far as it will
+# go; that is what puts code where this rule can see it.
+root = true
+
+[*.cs]
+dotnet_diagnostic.IDE0051.severity = error

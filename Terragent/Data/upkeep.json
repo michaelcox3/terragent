@@ -1,0 +1,49 @@
+{
+  "upkeeps": [
+    {
+      "name": "torch_1",
+      "item": "Torch",
+      "tier": 1,
+      "ceiling": 5,
+      "restockAt": 1,
+      "reserve": 1,
+      "note": "Gel comes one slime at a time and a torch costs a gel and a wood, so stopping to make a hundred is an hour not spent on the run. Down to the one it sees by, it tops up."
+    },
+    {
+      "name": "torch_2",
+      "item": "Torch",
+      "tier": 2,
+      "ceiling": 30,
+      "restockAt": 6,
+      "reserve": 1,
+      "note": "A silver pickaxe means going deeper, which means more dark and more slimes on the way through it. The hour spent stocking up starts buying itself back."
+    },
+    {
+      "name": "torch_3",
+      "item": "Torch",
+      "tier": 3,
+      "ceiling": 60,
+      "restockAt": 12,
+      "reserve": 1,
+      "note": "By gold the run is in the caverns, gel is no longer scarce, and being caught unlit is what costs time."
+    },
+    {
+      "name": "glowsticks",
+      "item": "Glowstick",
+      "tier": 1,
+      "ceiling": 1,
+      "restockAt": 0,
+      "reserve": 0,
+      "note": "A torch will not light under water, and a belief with no light reads Unknown for every cell, which is how a run ended standing submerged in its own shaft, swinging at holes it had already dug. Not craftable, unlike the torch: these come out of pots and chests, so this cannot come into force until the run is somewhere that has them. It hung on the torch node for one run, where the only source above ground was a jellyfish, and the agent stood on the shore waiting for one instead of building its bow."
+    },
+    {
+      "name": "arrows",
+      "item": "WoodenArrow",
+      "tier": 1,
+      "ceiling": 300,
+      "restockAt": 60,
+      "reserve": 0,
+      "note": "One wood makes five, so three hundred is sixty wood and a work bench. Cheap enough to hold a lot of, and running dry mid-fight is what a bow is for."
+    }
+  ]
+}

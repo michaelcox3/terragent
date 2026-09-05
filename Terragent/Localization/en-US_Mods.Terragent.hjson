@@ -1,0 +1,8 @@
+Keybinds: {
+	"Toggle path overlay.DisplayName": Toggle path overlay
+	"Toggle agent panel.DisplayName": Toggle agent panel
+	"Toggle agent driving.DisplayName": Toggle agent driving
+	"Toggle invulnerable.DisplayName": Toggle invulnerable
+	"Run movement scenarios.DisplayName": Run movement scenarios
+	"Run pathing tests.DisplayName": Run pathing tests
+}

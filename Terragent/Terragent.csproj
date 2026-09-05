@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Absolute because tMLMod.targets lives in the Steam install, not beside the
+       source. tModLoader's own template assumes the project sits under ModSources
+       inside that install; this project lives in the repository and is reached
+       through a directory junction, so the relative path would not resolve.
+       Override with -p:tMLTargets=<path>, or with TMODLOADER_INSTALL_PATH= in
+       the repo's .env, on another machine. -->
+  <PropertyGroup>
+    <_EnvFile>$(MSBuildProjectDirectory)\..\.env</_EnvFile>
+    <_EnvText Condition="Exists('$(_EnvFile)')">$([System.IO.File]::ReadAllText('$(_EnvFile)'))</_EnvText>
+    <TmlInstallFromEnvFile Condition="'$(_EnvText)' != ''">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^\s*TMODLOADER_INSTALL_PATH\s*=\s*(.+?)\s*$').Groups[1].Value)</TmlInstallFromEnvFile>
+    <tMLTargets Condition="'$(tMLTargets)' == '' AND '$(TmlInstallFromEnvFile)' != ''">$(TmlInstallFromEnvFile)\tMLMod.targets</tMLTargets>
+    <tMLTargets Condition="'$(tMLTargets)' == ''">C:\Program Files (x86)\Steam\steamapps\common\tModLoader\tMLMod.targets</tMLTargets>
+      <!-- Unread parameters and members, so a pass like this one is the compiler's job. -->
+    <WarningsAsErrors>$(WarningsAsErrors);CS9113;CS0169;CS0414</WarningsAsErrors>
+  </PropertyGroup>
+  <Import Project="$(tMLTargets)" />
+
+  <!-- Stamp the build time into the assembly so the panel can show which build is
+       actually loaded. A stale .tmod is otherwise indistinguishable from a bug: the
+       game holds the package while it runs, so a `dotnet build` during a session
+       fails with TML003 and the running mod silently stays behind. That cost a
+       round of "nothing has changed since last time", which was true and unreadable. -->
+  <PropertyGroup>
+    <AssemblyName>Terragent</AssemblyName>
+    <!-- The SDK turns this into AssemblyInformationalVersionAttribute for us, so set
+         it rather than adding the attribute. Adding a second one is a
+         duplicate attribute build error. -->
+    <InformationalVersion>$([System.DateTime]::Now.ToString("MMM-dd HH:mm:ss"))</InformationalVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!-- The arena and its scenarios are development scaffolding: they build terrain
+       into a world and can exit the game, which has no business in a published mod.
+       Defined for Debug only, so `dotnet build -c Release` and tModLoader's own
+       in-game publish both compile without them. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);TESTING</DefineConstants>
+  </PropertyGroup>
+
+
+</Project>
