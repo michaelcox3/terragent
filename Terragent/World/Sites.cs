@@ -20,9 +20,10 @@ internal sealed class Sites(ITerrain terrain) : ISites
     // bounded because a search over the whole world would find ore nobody has seen.
     private const int Far = 120;
 
-    public Point? Nearest(Point from, IReadOnlyList<int> tileIDs)
+    public Point? Nearest(Point from, IReadOnlyList<int> tileIDs, int within = int.MaxValue)
     {
-        for (int ring = 0; ring <= Far; ring++)
+        int edge = System.Math.Min(within, Far);
+        for (int ring = 0; ring <= edge; ring++)
         {
             if (InRing(from, ring, tileIDs) is { } found)
             {

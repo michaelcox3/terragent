@@ -29,12 +29,7 @@ internal interface IPilot
     // One search over all of them. Asked before choosing, so that a job is picked by what
     // the ground allows rather than by what looks close: the ore behind a wall is nearer
     // than the ore down the shaft and further away in every sense that matters.
-    //
-    /// <param name="which">Where the one it reached sits in the list handed over.</param>
-    // A number, not the destination, because two of them can be equal: every craft in an
-    // objective offers the body's own footing with no arrival rule. And returned here
-    // rather than on the route, since it only means anything against this list.
-    Route? Reachable(IReadOnlyList<Destination> destinations, out int which);
+    RouteMatch? FindRoute(IReadOnlyList<Destination> destinations);
 
     /// <summary>Go to this destination along this route, dropping whatever it was doing.</summary>
     // Two arguments and not a settable destination, because there is no such thing as a

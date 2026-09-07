@@ -18,6 +18,7 @@ namespace Terragent.Work.Objectives;
 // No memory of its own. The progression latches it, because reached once is reached and
 // spending the wood on the bench it was for must not undo the gathering.
 internal sealed class Obtain(
+    string key,
     string label,
     IRecipeTree recipes,
     ITerrain terrain,
@@ -30,12 +31,15 @@ internal sealed class Obtain(
     IClock clock,
     IJournal journal,
     IReadOnlyList<int> items,
+    IReadOnlyDictionary<int, int> stations,
     int count) : IObjective
 {
     /// <summary>How far down a tree to expand when planning.</summary>
     // Deeper than the two the walk uses to judge a recipe followable. Ore to bar to anvil
     // to pickaxe is four, and the bench under the furnace is deeper still.
-    private const int Deep = 6;
+    public const int Deep = 6;
+
+    public string Key => key;
 
     public string Label => label;
 
@@ -58,6 +62,10 @@ internal sealed class Obtain(
     {
         List<IJob> jobs = [];
 
+        // Which stations something in this list still wants left standing. Everything the
+        // run uses and is not on this is worth carrying instead.
+        HashSet<int> wanting = [];
+
         foreach (int item in items)
         {
             Need tree = recipes.Of(item, Deep);
@@ -73,13 +81,43 @@ internal sealed class Obtain(
                 && RecipeTree.Craftable(tree, count, bag.Carrying, bag.NearStation) is
                     { } next)
             {
-                Make(jobs, next.Node, next.Wanted);
+                Make(jobs, next.Node, next.Wanted, wanting);
             }
 
             Looking(jobs, missing);
         }
 
+        Fetching(jobs, wanting);
         return jobs;
+    }
+
+    /// <summary>Taking back a station nothing here needs standing.</summary>
+    // A bench put down for one craft is a bench abandoned the moment the run walks off
+    // mining, and the next craft finds it thirty tiles and ten rows away. Carrying it is
+    // one swing and one placement, so the rule is simply that a station belongs in the bag
+    // unless something wants it up.
+    //
+    // No memory of having placed it. What is wanted is read out of the jobs just built, so
+    // the tick the run stops needing a bench is the tick it goes and picks one up, and the
+    // tick it needs one again Make puts it back down.
+    private void Fetching(List<IJob> jobs, HashSet<int> wanting)
+    {
+        foreach (KeyValuePair<int, int> station in stations)
+        {
+            if (wanting.Contains(station.Key) || bag.Carrying(station.Value) > 0)
+            {
+                continue;
+            }
+
+            // Both ways, as Trips does for anything else. Breaking a station leaves it on
+            // the ground rather than in the bag, so the gather alone finishes with the
+            // bench at the body's feet and the job still not done.
+            //
+            // One is enough. A second is litter, and asking for one more than is carried
+            // would be a job that can never be done.
+            jobs.Add(new Pickup(bag, drops, station.Value, 1));
+            jobs.Add(new Gather(terrain, bag, hand, sites, station.Value, [station.Key], 1));
+        }
     }
 
     /// <summary>Going to look, when what is wanted might simply not have been seen.</summary>
@@ -154,22 +192,37 @@ internal sealed class Obtain(
     /// <summary>Making the next thing, or standing up the station it is made at.</summary>
     // The station comes first and is two jobs, not one: a bench has to be crafted and then
     // put down, and the game only counts the second.
-    private void Make(List<IJob> jobs, Need node, int wanted)
+    private void Make(List<IJob> jobs, Need node, int wanted, HashSet<int> wanting)
     {
         foreach ((Need station, int tileID) in node.Stations)
         {
-            if (bag.NearStation(tileID))
+            wanting.Add(tileID);
+
+            // One standing near enough to walk to counts, which is why this asks the
+            // ground and not only the bag. Standing up another is free in walking terms and
+            // so wins every search against the bench three tiles away: the run put one
+            // down, made a second where it stood, and carried the spare for ever.
+            //
+            // Near enough and not anywhere. Craft walks to a station within the same
+            // distance and no further, so between them exactly one of the two is ever the
+            // right thing to do.
+            if (bag.NearStation(tileID)
+                || sites.Nearest(body.Footing, [tileID], Craft.Reuse) is not null)
             {
                 continue;
             }
 
             jobs.Add(bag.Carrying(station.ItemID) > 0
                 ? new Place(terrain, bag, hand, journal, station.ItemID, tileID)
-                : new Craft(bag, sites, station.ItemID, 0, 1));
-            return;
+                : new Craft(terrain, bag, sites, journal, station.ItemID, 0, 1));
+            break;
         }
 
-        jobs.Add(new Craft(bag, sites, node.ItemID, Station(node),
+        // Added whether or not a station is wanting, because the craft is the job that
+        // knows how to walk to one already standing. Stopping at the placing left the run
+        // with no way to use the bench it put down a minute ago, and nothing to do at all
+        // when there was nowhere to put a fresh one.
+        jobs.Add(new Craft(terrain, bag, sites, journal, node.ItemID, Station(node),
             bag.Carrying(node.ItemID) + wanted));
     }
 

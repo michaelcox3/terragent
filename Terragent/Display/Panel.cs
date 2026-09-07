@@ -92,7 +92,8 @@ public sealed class Panel : ModSystem, IPanel
 
         AgentPlayer driver = player.GetModPlayer<AgentPlayer>();
 
-        if (_driving.Contains(at) && driver.Agent is { } agent)
+        IAgent? agent = driver.Agent;
+        if (_driving.Contains(at) && agent is not null)
         {
             agent.Driving = !agent.Driving;
             player.mouseInterface = true;
@@ -170,14 +171,19 @@ public sealed class Panel : ModSystem, IPanel
     private static List<string> Lines(IAgent agent)
     {
         IForeman foreman = agent.Foreman;
-        List<string> lines =
-        [
-            foreman.Objective is { } objective
-                ? $"Objective: {objective.Label}"
-                : "Objective: nothing left it can do",
-            $"Reached: {agent.Reached.Count}",
-            string.Empty,
-        ];
+        List<string> lines = [$"Reached: {agent.Reached.Count}", string.Empty];
+
+        // Asked of the run rather than of the objective in hand. The graph is what knows
+        // which nodes are workable; the foreman is handed one thing to offer jobs from and
+        // has no business being the place a reader finds out what the run is up to.
+        IReadOnlyList<IObjective> active = agent.Progression.Active();
+        lines.Add(active.Count == 0 ? "Objectives: nothing left it can do" : "Objectives");
+        foreach (IObjective live in active)
+        {
+            lines.Add($"    {live.Label}");
+        }
+
+        lines.Add(string.Empty);
 
         IPilot pilot = foreman.Pilot;
         lines.Add(foreman.Job is { } doing ? $"Doing: {doing.Label}" : "Doing: nothing");
@@ -189,8 +195,22 @@ public sealed class Panel : ModSystem, IPanel
             : $"Pilot: {Said(pilot.Progress)}");
         lines.Add(string.Empty);
         lines.Add("Items Needed");
-        foreach (KeyValuePair<int, int> want in foreman.Objective?.Missing()
-            ?? new Dictionary<int, int>())
+
+        // Added up across every live objective, because two of them wanting wood want the
+        // total between them, and one of the two numbers would say the run was nearly done
+        // with a trip it had barely started.
+        Dictionary<int, int> wanted = [];
+        foreach (IObjective objective in active)
+        {
+            foreach (KeyValuePair<int, int> want in objective.Missing())
+            {
+                wanted[want.Key] = wanted.TryGetValue(want.Key, out int had)
+                    ? had + want.Value
+                    : want.Value;
+            }
+        }
+
+        foreach (KeyValuePair<int, int> want in wanted)
         {
             lines.Add($"    {Names.Item(want.Key)} x{want.Value}");
         }
@@ -204,11 +224,14 @@ public sealed class Panel : ModSystem, IPanel
         //
         // Matched by name rather than by instance: the objective builds fresh jobs every
         // time it is asked, so nothing in this list is the object the foreman holds.
-        foreach (IJob job in foreman.Objective?.Jobs() ?? [])
+        foreach (IObjective objective in active)
         {
-            lines.Add(job.Label == foreman.Job?.Label
-                ? $"  > {job.Label}"
-                : $"    {job.Label}");
+            foreach (IJob job in objective.Jobs())
+            {
+                lines.Add(job.Label == foreman.Job?.Label
+                    ? $"  > {job.Label}"
+                    : $"    {job.Label}");
+            }
         }
 
         lines.Add(string.Empty);
@@ -218,16 +241,32 @@ public sealed class Panel : ModSystem, IPanel
         return lines;
     }
 
-    /// <summary>How many of the run's nodes are objectives rather than standing supplies.</summary>
+    /// <summary>How many of the run's nodes are real steps rather than upkeep.</summary>
     private static int Steps(IAgent agent)
     {
         int steps = 0;
-        foreach (Node node in agent.Progression.Nodes)
+        foreach (DagNode node in agent.Progression.Objectives)
         {
-            steps += node.Standing ? 0 : 1;
+            steps += node.Objective is Supply ? 0 : 1;
         }
 
         return steps;
+    }
+
+    /// <summary>Whether this node is one of the ones being worked right now.</summary>
+    // By instance, since a node holds the one objective it was built with and hands the
+    // same one to the foreman.
+    private static bool Live(IAgent agent, IObjective objective)
+    {
+        foreach (IObjective working in agent.Foreman.Objectives)
+        {
+            if (ReferenceEquals(working, objective))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The next few things the run has not reached, current one first.</summary>
@@ -237,14 +276,14 @@ public sealed class Panel : ModSystem, IPanel
     {
         HashSet<string> reached = [.. agent.Reached];
         int shown = 0;
-        foreach (Node node in agent.Progression.Nodes)
+        foreach (DagNode node in agent.Progression.Objectives)
         {
-            if (node.Standing || reached.Contains(node.Key))
+            if (node.Objective is Supply || reached.Contains(node.Objective.Key))
             {
                 continue;
             }
 
-            lines.Add(ReferenceEquals(node.Objective, agent.Foreman.Objective)
+            lines.Add(Live(agent, node.Objective)
                 ? $"  > {node.Objective.Label}"
                 : $"    {node.Objective.Label}");
 

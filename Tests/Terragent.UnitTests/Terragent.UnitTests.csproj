@@ -35,10 +35,12 @@
     <Compile Include="..\..\Terragent\Pathfinding\INavigator.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Navigator.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Route.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\RouteMatch.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Step.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Costs.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Leap.cs" />
     <Compile Include="..\..\Terragent\World\Hitbox.cs" />
+    <Compile Include="..\..\Terragent\World\Spot.cs" />
     <Compile Include="..\..\Terragent\World\ITerrain.cs" />
     <Compile Include="..\..\Terragent\World\TileKind.cs" />
     <Compile Include="..\..\Terragent\World\Ground.cs" />
@@ -54,6 +56,7 @@
     <Compile Include="RecipeTreeTests.cs" />
     <Compile Include="NavigatorTests.cs" />
     <Compile Include="CostsTests.cs" />
+    <Compile Include="SpotTests.cs" />
   </ItemGroup>
 
 </Project>

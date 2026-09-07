@@ -47,8 +47,7 @@ public class NavigatorTests
             from,
             [new Destination(to, Within: 0)],
             new Ability(Prices, PickPower, Jump, test.Blocks),
-            new HashSet<(Point, Point)>(),
-            out _)?.Steps as List<Step>;
+            new HashSet<(Point, Point)>())?.Route.Steps as List<Step>;
         string? complaint = Judge(test, grid, route);
 
         if (complaint is null)
@@ -107,8 +106,7 @@ public class NavigatorTests
                 },
             ],
             new Ability(Prices, PickPower, Jump, 0),
-            new HashSet<(Point, Point)>(),
-            out _);
+            new HashSet<(Point, Point)>())?.Route;
         Assert.NotNull(route);
         Assert.True(route.Steps.Count > 0,
             "the search should not call the footing over the hole arrived");
@@ -139,7 +137,7 @@ public class NavigatorTests
         Point goal = new(7, 2);
 
         Route? loose = search.FindRoute(from, [new Destination(goal, Within: 3)], able,
-            new HashSet<(Point, Point)>(), out _);
+            new HashSet<(Point, Point)>())?.Route;
 
         Route? fussy = search.FindRoute(
             from,
@@ -150,8 +148,7 @@ public class NavigatorTests
                 },
             ],
             able,
-            new HashSet<(Point, Point)>(),
-            out _);
+            new HashSet<(Point, Point)>())?.Route;
 
         Assert.NotNull(loose);
         Assert.NotNull(fussy);
@@ -171,15 +168,14 @@ public class NavigatorTests
             "          ",
             "##########");
 
-        Route? route = new Navigator(grid).FindRoute(
+        RouteMatch? reached = new Navigator(grid).FindRoute(
             new Point(1, 2),
             [new Destination(new Point(8, 2)), new Destination(new Point(3, 2))],
             new Ability(Prices, PickPower, Jump, 0),
-            new HashSet<(Point, Point)>(),
-            out int which);
+            new HashSet<(Point, Point)>());
 
-        Assert.NotNull(route);
-        Assert.Equal(1, which);
+        Assert.NotNull(reached);
+        Assert.Equal(1, reached.Index);
     }
 
     /// <summary>

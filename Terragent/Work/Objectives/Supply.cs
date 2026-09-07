@@ -16,6 +16,7 @@ namespace Terragent.Work.Objectives;
 // between one trip and forty.
 internal sealed class Supply : IObjective
 {
+    private readonly string _key;
     private readonly string _label;
     private readonly IInventory _bag;
 
@@ -37,10 +38,11 @@ internal sealed class Supply : IObjective
     /// <param name="reserve">How many are held back from being spent on anything else.</param>
     // The reserve is declared here and once. It is a standing floor rather than a claim on
     // a tick, so the bag is told at the moment the supply comes into being and never again.
-    public Supply(string label, IInventory bag, IObjective filling, int itemID,
+    public Supply(string key, string label, IInventory bag, IObjective filling, int itemID,
         int restockAt, int ceiling, int reserve)
     {
         _filling = filling;
+        _key = key;
         _label = label;
         _bag = bag;
         _itemID = itemID;
@@ -53,6 +55,8 @@ internal sealed class Supply : IObjective
     // Named so the progression can tell two supplies for the same thing apart and keep
     // only the later one, which is how torches climb from five to sixty over a run.
     public int ItemID => _itemID;
+
+    public string Key => _key;
 
     public string Label => _label;
 

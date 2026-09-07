@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Terragent.Report;
 using Terragent.Work;
+using Terragent.Work.Objectives;
 using Terragent.World;
 
 namespace Terragent;
@@ -41,13 +42,30 @@ internal sealed class Agent(IProgression progression, IForeman foreman, ITerrain
         // Handed down every tick rather than when it changes. The foreman ignores the
         // objective it already has, so the only tick this does anything on is the one
         // after something completes.
-        _foreman.Objective = _progression.Next();
-        journal.Change("objective", _foreman.Objective is { } objective
-            ? $"{objective.Label}, {_progression.Reached.Count} reached"
-            : "nothing left it can do");
+        _foreman.Objectives = _progression.Active();
+        journal.Change("objectives", Said(_foreman.Objectives, _progression.Reached.Count));
 
         _foreman.Tick();
     }
 
     public void Restore(IEnumerable<string> reached) => _progression.Restore(reached);
+
+    /// <summary>Every live objective on one line, for the log.</summary>
+    // All of them by name rather than the first and a count. Written through Change, so a
+    // run that has been on the same three for ten minutes says so once.
+    private static string Said(IReadOnlyList<IObjective> working, int reached)
+    {
+        if (working.Count == 0)
+        {
+            return "nothing left it can do";
+        }
+
+        List<string> names = [];
+        foreach (IObjective objective in working)
+        {
+            names.Add(objective.Label);
+        }
+
+        return $"{string.Join(", ", names)}; {reached} reached";
+    }
 }

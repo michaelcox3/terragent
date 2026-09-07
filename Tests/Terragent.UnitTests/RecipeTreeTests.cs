@@ -223,6 +223,20 @@ public class RecipeTreeTests
     // With everything raw in hand, the first thing to make is the bench, because the
     // furnace is made at one and the bars are smelted in that. Asking the game for the
     // pickaxe here gets a no with nothing to do about it.
+    /// <summary>Every station the whole tree stands at, however deep it sits.</summary>
+    // The anvil is worked at a bench and the pickaxe at the anvil, so a pickaxe run stands
+    // at both. Reading only the top node gives the anvil alone, and the bench it put down
+    // to make that anvil is then left in the world for ever.
+    [Fact]
+    public void StationsAreCollectedFromTheWholeTree()
+    {
+        IReadOnlyDictionary<int, int> stations = RecipeTree.Stations(Pickaxe());
+
+        Assert.Equal(WorkBench, stations[WorkBenches]);
+        Assert.Equal(IronAnvil, stations[Anvils]);
+        Assert.Equal(Furnace, stations[Furnaces]);
+    }
+
     [Fact]
     public void TheBenchIsMadeFirst()
     {

@@ -98,7 +98,8 @@ public sealed class AgentPlayer : ModPlayer
 
     public override void ProcessTriggers(TriggersSet triggers)
     {
-        if (Player.whoAmI != Main.myPlayer || _agent is not { } agent)
+        IAgent? agent = _agent;
+        if (Player.whoAmI != Main.myPlayer || agent is null)
         {
             return;
         }
@@ -142,7 +143,8 @@ public sealed class AgentPlayer : ModPlayer
 
     public override void SaveData(TagCompound tag)
     {
-        if (_agent is { } agent && agent.Reached.Count > 0)
+        IAgent? agent = _agent;
+        if (agent is not null && agent.Reached.Count > 0)
         {
             tag[ReachedTag] = new List<string>(agent.Reached);
         }

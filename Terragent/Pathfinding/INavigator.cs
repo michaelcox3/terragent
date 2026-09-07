@@ -22,11 +22,11 @@ internal interface INavigator
     /// <summary>The cheapest route to whichever of several places turns out cheapest.</summary>
     // One search over all of them, not one per place. Straight line distance picks the ore
     // behind a wall over the ore down an open shaft, and overruling that is what a search
-    // is for. The route says which one it settled on.
+    // is for. The match says which one it settled on.
     //
     // Arrival is a radius here, whatever the destinations carry. A predicate belongs to one
     // place and this is asking about several; the real test is applied by whoever routes to
     // the one that wins.
-    Route? FindRoute(Point from, IReadOnlyList<Destination> destinations, Ability ability,
-        ISet<(Point From, Point To)> refused, out int which);
+    RouteMatch? FindRoute(Point from, IReadOnlyList<Destination> destinations,
+        Ability ability, ISet<(Point From, Point To)> refused);
 }

@@ -12,6 +12,10 @@ namespace Terragent.Work.Jobs;
 // A bench in the bag is not a bench to work at, and everything after the first craft waits
 // on this. It is the one job whose output is a tile existing rather than an item arriving.
 //
+// Making room is part of it. Underground there is rarely two clear cells with floor under
+// both, and a job that could only put a bench on ground that already suited it stopped
+// offering anything the moment the run went down a shaft.
+//
 // Not to be confused with the blocks a route puts down. Those are booked by the search and
 // laid by the pilot, because a bridge is part of getting somewhere. This is work.
 internal sealed class Place(
@@ -26,18 +30,6 @@ internal sealed class Place(
     private readonly IInventory _bag = bag;
     private readonly IHand _hand = hand;
 
-    /// <summary>How far to look for somewhere to stand it.</summary>
-    // Close, because the point is to put it where the run already is. A bench eight tiles
-    // away is a walk, and the walk is what this job exists to avoid repeating.
-    private const int Nearby = 8;
-
-    /// <summary>Rows to try either side of the body's own, nearest first.</summary>
-    // Not the body's row alone. Mining stone walks the body down a shaft of its own
-    // digging, and along that one row there is rock to both sides for ever: the job then
-    // offers nothing and the run goes quiet with a bench in the bag. Up before down,
-    // since climbing out of the hole is what is wanted.
-    private static readonly int[] Rows = [0, -1, 1, -2, 2, -3, 3];
-
     public string Label => $"Place {Names.Item(itemID)}";
 
     /// <summary>Done when the game agrees the station is in reach.</summary>
@@ -45,46 +37,44 @@ internal sealed class Place(
     // recipe available, and the game is what decides that.
     public bool Done => _bag.NearStation(tileID);
 
-    /// <summary>Still worth being here while the whole bench still fits on this spot.</summary>
+    /// <summary>Still worth being here while this spot could still be made to take one.</summary>
+    // Could be, not already is. The first swings of the job are what make it fit, and a
+    // test that asked whether it fits now would drop the job on the tick it started.
     public bool Workable(ITarget target) =>
-        target.Tile is { } tile && Placement.Fits(_terrain, tileID, Above(tile));
+        target.Tile is { } tile && Standing(Above(tile)) is not null;
 
     public Offer? Nearest(Point from)
     {
-        for (int ring = 1; ring <= Nearby; ring++)
+        if (Placement.Find(_terrain, tileID, from, _bag.PickPower, _bag.Blocks) is not
+            { } spot)
         {
-            for (int across = -ring; across <= ring; across += ring * 2)
-            {
-                foreach (int down in Rows)
-                {
-                    Point at = new(from.X + across, from.Y + down);
-                    if (!Placement.Fits(_terrain, tileID, Above(at)))
-                    {
-                        continue;
-                    }
-
-                    return new Offer(
-                        new TileTarget(at),
-                        new Destination(at)
-                        {
-                            Arrived = footing =>
-                                _hand.CanPlaceFrom(footing, Above(at).X, Above(at).Y),
-                        });
-                }
-            }
+            // Said out loud, because an offer that is never made is invisible: the job
+            // simply stops appearing among the candidates and the run goes quiet for no
+            // stated reason.
+            journal.Change("nowhere", $"{Names.Item(itemID)} has nowhere near "
+                + $"({from.X}, {from.Y}) it could be stood, with a pickaxe of "
+                + $"{_bag.PickPower} and {_bag.Blocks} blocks");
+            return null;
         }
 
-        // Said out loud, because an offer that is never made is invisible: the job simply
-        // stops appearing among the candidates and the run goes quiet for no stated reason.
-        journal.Change("nowhere", $"{Names.Item(itemID)} has no spot within {Nearby} of "
-            + $"({from.X}, {from.Y}) that it fits on");
-        return null;
+        // The floor tile, since that is what the body stands on and what the target names.
+        Point at = new(spot.At.X, spot.At.Y + 1);
+
+        // Digging reach when there is digging to do, which is the tighter box. Arriving at
+        // placing range and then having to break something leaves the body swinging at a
+        // cell it cannot touch.
+        return new Offer(
+            new TileTarget(at),
+            new Destination(at)
+            {
+                Arrived = spot.Ready
+                    ? footing => _hand.CanPlaceFrom(footing, spot.At.X, spot.At.Y)
+                    : footing => _hand.CanUseFrom(footing, spot.At.X, spot.At.Y),
+            });
     }
 
     public void Work(ITarget target)
     {
-        _bag.Hold(itemID);
-
         if (target.Tile is not { } site)
         {
             return;
@@ -92,8 +82,26 @@ internal sealed class Place(
 
         // The tile goes above the floor, which is where the body is standing on it.
         Point put = Above(site);
-        _hand.Aim(put.X, put.Y);
-        _hand.Use();
+        if (Standing(put) is not { } spot)
+        {
+            return;
+        }
+
+        // One cell a tick, read off the ground every tick rather than remembered. A list
+        // worked down from memory swings at cells the last swing already opened.
+        if (spot.Clear.Count > 0)
+        {
+            Swing(_bag.Pickaxe, spot.Clear[0]);
+            return;
+        }
+
+        if (spot.Fill.Count > 0)
+        {
+            Swing(_bag.Block, spot.Fill[0]);
+            return;
+        }
+
+        Swing(itemID, put);
 
         // Everything the game could be objecting to, in one line, written only when it
         // changes. A placement that is refused says nothing at all by itself: the swing
@@ -105,8 +113,21 @@ internal sealed class Place(
             + $"tile there {_terrain.KindAt(put.X, put.Y)}, "
             + $"floor under {_terrain.KindAt(site.X, site.Y)}, "
             + $"covers {Placement.Covers(tileID, put)}, "
-            + $"fits {Placement.Fits(_terrain, tileID, put)}, "
             + $"at station {_bag.NearStation(tileID)}");
+    }
+
+    /// <summary>What standing one at this cell would still take.</summary>
+    private Spot? Standing(Point put) =>
+        Placement.Needs(_terrain, tileID, put, _bag.PickPower);
+
+    /// <summary>Hold a thing and press use on a cell, which is every swing this job makes.</summary>
+    // Held every tick, not once. A torch raised for light in between leaves the wrong
+    // thing in hand, and the swing then goes out with a pickaxe where a bench was meant.
+    private void Swing(int held, Point cell)
+    {
+        _bag.Hold(held);
+        _hand.Aim(cell.X, cell.Y);
+        _hand.Use();
     }
 
     /// <summary>The cell a station put on this floor tile would start in.</summary>

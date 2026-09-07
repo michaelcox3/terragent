@@ -74,24 +74,17 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     private const int LeapColumns = 5;
 
     /// <summary>The route to whichever of these it reaches soonest, or null when none.</summary>
-    /// <param name="which">
-    /// Where the one it reached sits in <paramref name="destinations"/>.
-    /// </param>
-    // The index comes back here, from the method that was handed the list, rather than on
-    // the route. A route is its steps and what they cost to find; a number that only means
-    // something against somebody else's list is not part of a path.
-    //
-    // An index and not the destination itself, because two of them can be equal: every
-    // craft in an objective offers the body's own footing with no arrival rule, so the
-    // values match and the caller could not tell which job it had chosen.
-    public Route? FindRoute(Point from, IReadOnlyList<Destination> destinations,
-        Ability ability, ISet<(Point From, Point To)> refused, out int which) =>
+    // The index travels with the route rather than on it. A route is its steps and what
+    // they cost to find; a number that only means something against somebody else's list
+    // is not part of a path, and it is not a second answer either.
+    public RouteMatch? FindRoute(Point from, IReadOnlyList<Destination> destinations,
+        Ability ability, ISet<(Point From, Point To)> refused) =>
         FindRoute(ability.Costs, ability.PickPower, ability.Leap, from, destinations,
-            refused, ability.Blocks, null, out which);
+            refused, ability.Blocks, null);
 
     public Route? FindRoute(Point from, Destination to, Ability ability,
         ISet<(Point From, Point To)> refused) =>
-        FindRoute(from, [to], ability, refused, out _);
+        FindRoute(from, [to], ability, refused)?.Route;
 
     /// <summary>
     /// The cheapest route to whichever destination turns out to be cheapest.
@@ -103,12 +96,10 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // A tile with a radius beside it in a second list is the same thing said twice, and
     // the two lists have to be kept in step by hand.
     /// <param name="leap">What a jump from a standstill can reach, in rows and in columns at each landing height.</param>
-    private Route? FindRoute(Costs costs, int pickPower, Leap leap,
+    private RouteMatch? FindRoute(Costs costs, int pickPower, Leap leap,
         Point from, IReadOnlyList<Destination> destinations,
-        ISet<(Point From, Point To)>? refused, int blocks, ISet<Point>? immovable,
-        out int which)
+        ISet<(Point From, Point To)>? refused, int blocks, ISet<Point>? immovable)
     {
-        which = 0;
         if (destinations.Count == 0)
         {
             return null;
@@ -134,9 +125,10 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         while (frontier.Count > 0 && expanded++ < maxNodes)
         {
             Point current = frontier.Dequeue();
-            if (Reached(current, destinations, out which))
+            if (Reached(current, destinations, out int which))
             {
-                return new Route(Rebuild(cameFrom, from, current), expanded);
+                return new RouteMatch(which,
+                    new Route(Rebuild(cameFrom, from, current), expanded));
             }
 
             foreach (Edge move in Moves(current, costs, pickPower, blocks, leap))
@@ -194,7 +186,14 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // A box, not the circle Pilot.Shifted measures: Terraria's reach is rectangular,
     // with tileRangeX and tileRangeY separate. Do not change either to match the other.
     public static bool Reached(Point at, Point site, int radius) =>
-        Gap(at, site) <= radius && Math.Abs(at.Y - site.Y) <= radius;
+        Reached(at, site, radius, radius);
+
+    /// <summary>The same with the columns and the rows judged separately.</summary>
+    // Terraria's crafting reach is wider than it is tall. One number for both either stops
+    // the body two rows above a bench the game will not let it use, or walks it further
+    // along the floor than it needs to go.
+    public static bool Reached(Point at, Point site, int across, int down) =>
+        Gap(at, site) <= across && Math.Abs(at.Y - site.Y) <= down;
 
     /// <summary>How many columns short of a site the body is, zero when over it.</summary>
     private static int Gap(Point at, Point site) =>

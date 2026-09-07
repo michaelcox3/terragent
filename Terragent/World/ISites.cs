@@ -14,5 +14,9 @@ internal interface ISites
     /// <summary>The closest seen tile of any of these types, or null when none has been.</summary>
     // Several types because the answer is usually a group: any tree, any iron or lead,
     // any of the three tiles that count as a work bench.
-    Point? Nearest(Point from, IReadOnlyList<int> tileIDs);
+    /// <param name="within">How far out to bother looking, in tiles.</param>
+    // A caller that only cares about a bench it could walk to pays for the whole box
+    // otherwise, and a miss is the expensive answer: the rings stop at the first hit, so
+    // finding nothing is what walks every cell.
+    Point? Nearest(Point from, IReadOnlyList<int> tileIDs, int within = int.MaxValue);
 }

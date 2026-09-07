@@ -25,12 +25,15 @@ namespace Terragent.Work;
 // Every oscillation this project has had was a fourth reason to let go.
 internal interface IForeman
 {
-    /// <summary>What the run is working towards, or null to stand idle.</summary>
-    // Setting it drops the job in hand, since the job was chosen to advance the objective
-    // that is being replaced. Setting the one it already has changes nothing, because the
-    // caller above hands this down every tick and a job dropped every tick is a body that
-    // never arrives anywhere.
-    IObjective? Objective { get; set; }
+    /// <summary>What the run is working towards, empty to stand idle.</summary>
+    // Several, because the progression is a graph and everything whose requirements are
+    // behind it is workable at once. Their jobs go into one pool and the search takes
+    // whichever is nearest, so nothing here has to decide between them.
+    //
+    // Setting it drops the job in hand, since the job was chosen to advance what is being
+    // replaced. Setting the same list changes nothing, because the caller hands this down
+    // every tick and a job dropped every tick is a body that never arrives anywhere.
+    IReadOnlyList<IObjective> Objectives { get; set; }
 
     /// <summary>The job being seen through, or null when none is chosen.</summary>
     IJob? Job { get; }

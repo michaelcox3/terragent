@@ -45,7 +45,7 @@ internal sealed class Pilot(
     // The search prices what a body of this size should be able to do. A ledge it cannot
     // actually climb looks like one it can until it stands there failing, and only the
     // follower ever finds out.
-    private readonly HashSet<(Point From, Point To)> _refused = [];
+    private readonly HashSet<(Point From, Point To)> _refusedMoves = [];
 
     public Destination? Destination => _destination;
 
@@ -75,7 +75,8 @@ internal sealed class Pilot(
             Search(at, destination);
         }
 
-        if (_route is not { } route)
+        Route? route = _route;
+        if (route is null)
         {
             Progress = Progress.Unreachable;
             return;
@@ -100,8 +101,8 @@ internal sealed class Pilot(
         Press(route.Steps[_step], at);
     }
 
-    public Route? Reachable(IReadOnlyList<Destination> destinations, out int which) =>
-        _navigator.FindRoute(_body.Footing, destinations, Able(), _refused, out which);
+    public RouteMatch? FindRoute(IReadOnlyList<Destination> destinations) =>
+        _navigator.FindRoute(_body.Footing, destinations, Ability(), _refusedMoves);
 
     /// <summary>Take this destination and the route already found to it.</summary>
     // The route is given rather than looked for. Choosing among offers searched for one
@@ -126,7 +127,7 @@ internal sealed class Pilot(
     private void Search(Point at, Destination destination)
     {
         _step = 0;
-        _route = _navigator.FindRoute(at, destination, Able(), _refused);
+        _route = _navigator.FindRoute(at, destination, Ability(), _refusedMoves);
 
         journal.Change("route", _route is { } route
             ? $"({at.X}, {at.Y}) to ({destination.Site.X}, {destination.Site.Y}) "
@@ -139,7 +140,7 @@ internal sealed class Pilot(
     // Read at the moment a search starts, so a route is priced for the pickaxe actually
     // carried. Nothing that lights makes water infinitely dear rather than merely slow,
     // because a torch goes out down there and the map stops revealing.
-    private Ability Able() =>
+    private Ability Ability() =>
         new(
             Costs.Priced(
                 _body.RunSpeed,
@@ -201,7 +202,7 @@ internal sealed class Pilot(
             return false;
         }
 
-        _refused.Add((at, step.To));
+        _refusedMoves.Add((at, step.To));
         journal.Note("refused", $"({at.X}, {at.Y}) to ({step.To.X}, {step.To.Y}) by "
             + $"{step.Kind.ToString().ToLowerInvariant()} does not work; going round");
         Forget();

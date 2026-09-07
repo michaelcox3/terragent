@@ -15,6 +15,12 @@ namespace Terragent.Work.Objectives;
 // over every kind there is.
 internal interface IObjective
 {
+    /// <summary>What goes in the player file, stable across versions unlike a position.</summary>
+    // Beside the label because they are the same fact twice, one for a reader and one for
+    // the save: both name this entry of the run and both come off the same line of the
+    // file. Kept apart, the two halves of a name lived on two different objects.
+    string Key { get; }
+
     /// <summary>What to call it on the panel.</summary>
     // Every objective can say what it is, so nothing above has to keep a table of names
     // beside the things it is naming.

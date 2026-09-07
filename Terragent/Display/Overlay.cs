@@ -37,8 +37,13 @@ public sealed class Overlay : ModSystem, IOverlay
     // rather than joined.
     public override void PostDrawTiles()
     {
-        if (Main.gameMenu || Main.LocalPlayer is not { active: true } player
-            || player.GetModPlayer<AgentPlayer>().Agent is not { } agent)
+        if (Main.gameMenu || Main.LocalPlayer is not { active: true } player)
+        {
+            return;
+        }
+
+        IAgent? agent = player.GetModPlayer<AgentPlayer>().Agent;
+        if (agent is null)
         {
             return;
         }
@@ -63,7 +68,8 @@ public sealed class Overlay : ModSystem, IOverlay
         }
 
         IPilot pilot = agent.Foreman.Pilot;
-        if (pilot.Route is not { } route)
+        Route? route = pilot.Route;
+        if (route is null)
         {
             return;
         }

@@ -9,4 +9,4 @@ namespace Terragent.Work.Jobs;
 // The two together because they are decided together, from one position on one tick. Asked
 // for separately, the second answer can be about a different thing from the first, and the
 // body then works something it never walked to.
-internal readonly record struct Offer(ITarget Target, Destination Destination);
+internal sealed record Offer(ITarget Target, Destination Destination);

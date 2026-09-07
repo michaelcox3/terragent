@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria.ObjectData;
 
@@ -12,6 +13,17 @@ namespace Terragent.World;
 // decides and every station has its own.
 internal static class Placement
 {
+    /// <summary>How far out to look for somewhere to stand a tile.</summary>
+    // Close, because the point is to put it where the run already is. A bench eight tiles
+    // away is a walk, and the walk is what standing one up exists to avoid repeating.
+    private const int Nearby = 8;
+
+    /// <summary>Rows to try either side of the body's own, nearest first.</summary>
+    // Not the body's row alone. Mining stone walks the body down a shaft of its own
+    // digging, and along that one row there is rock to both sides for ever. Up before
+    // down, since climbing out of the hole is what is wanted.
+    private static readonly int[] Rows = [0, -1, 1, -2, 2, -3, 3];
+
     /// <summary>The cells a tile of this kind fills when put at <paramref name="at"/>.</summary>
     // The cursor names the object's origin, which for most furniture is its top left but
     // is not required to be, so the anchor is subtracted rather than assumed to be zero.
@@ -30,37 +42,53 @@ internal static class Placement
             shape.Height);
     }
 
-    /// <summary>Whether a tile of this kind would stand at <paramref name="at"/>.</summary>
-    // Every cell it fills has to be clear, and every column has to have something under it
-    // that will carry a building.
-    public static bool Fits(ITerrain terrain, int tileID, Point at)
+    /// <summary>Whether a tile of this kind would stand at <paramref name="at"/> as things are.</summary>
+    public static bool Fits(ITerrain terrain, int tileID, Point at) =>
+        Needs(terrain, tileID, at, 0) is { Ready: true };
+
+    /// <summary>What standing one here would take, or null when nothing would.</summary>
+    public static Spot? Needs(ITerrain terrain, int tileID, Point at, int pickPower) =>
+        Spot.Read(terrain, Covers(tileID, at), pickPower);
+
+    /// <summary>
+    /// The cheapest spot near a footing to stand one of these, or null when there is none.
+    /// </summary>
+    // A spot that already fits beats one that has to be dug out however much nearer the
+    // digging is, because the rings are walked outward and the first ready one wins. Only
+    // when nothing fits does the least work decide, which is what keeps a bench from being
+    // planted in a wall when there is open floor a step away.
+    /// <param name="blocks">How many blocks may be spent flooring it.</param>
+    public static Spot? Find(ITerrain terrain, int tileID, Point from, int pickPower,
+        int blocks)
     {
-        Rectangle covers = Covers(tileID, at);
+        Spot? cheapest = null;
 
-        for (int x = covers.Left; x < covers.Right; x++)
+        for (int ring = 1; ring <= Nearby; ring++)
         {
-            for (int y = covers.Top; y < covers.Bottom; y++)
+            for (int across = -ring; across <= ring; across += ring * 2)
             {
-                if (!terrain.Buildable(x, y))
+                foreach (int down in Rows)
                 {
-                    return false;
-                }
-            }
+                    Point at = new(from.X + across, from.Y + down);
+                    if (Needs(terrain, tileID, at, pickPower) is not { } spot
+                        || spot.Fill.Count > blocks)
+                    {
+                        continue;
+                    }
 
-            if (!Bears(terrain, x, covers.Bottom))
-            {
-                return false;
+                    if (spot.Ready)
+                    {
+                        return spot;
+                    }
+
+                    if (cheapest is null || spot.Work < cheapest.Work)
+                    {
+                        cheapest = spot;
+                    }
+                }
             }
         }
 
-        return true;
+        return cheapest;
     }
-
-    /// <summary>Whether this cell would carry a building, which is not what carries a body.</summary>
-    // A half block and a floor slope both hold the character up and neither anchors
-    // furniture: Terraria takes a whole solid tile or a platform and refuses the rest. The
-    // two questions were one predicate, and a bench aimed at a smoothed floor was refused
-    // silently every tick.
-    private static bool Bears(ITerrain terrain, int x, int y) =>
-        terrain.KindAt(x, y) is TileKind.Solid or TileKind.Platform;
 }

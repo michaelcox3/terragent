@@ -122,7 +122,9 @@ public sealed class Runner : ModSystem
                 return;
 
             case Phase.Entering:
-                if (Driver is not { } driver || driver.Agent is not { } agent)
+                AgentPlayer? driver = Driver;
+                IAgent? agent = driver?.Agent;
+                if (agent is null)
                 {
                     return;
                 }
@@ -198,7 +200,8 @@ public sealed class Runner : ModSystem
         // Generation saves the world and drops back to the menu rather than entering it,
         // so find the file it wrote and go in the way a saved world is gone into.
         Main.LoadWorlds();
-        if (Main.WorldList.FirstOrDefault(world => world.Name == _name) is not { } made)
+        WorldFileData? made = Main.WorldList.FirstOrDefault(world => world.Name == _name);
+        if (made is null)
         {
             Say("failed", $"the generated world {_name} is not on disk");
             Environment.Exit(3);
@@ -213,7 +216,9 @@ public sealed class Runner : ModSystem
         if (Main.ActivePlayerFileData?.Player is null)
         {
             Main.LoadPlayers();
-            if (Main.PlayerList.FirstOrDefault(saved => saved.Name == _name) is not { } them)
+            PlayerFileData? them =
+                Main.PlayerList.FirstOrDefault(saved => saved.Name == _name);
+            if (them is null)
             {
                 Say("failed", $"the fresh character {_name} is not on disk");
                 Environment.Exit(3);

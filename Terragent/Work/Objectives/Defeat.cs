@@ -16,6 +16,7 @@ namespace Terragent.Work.Objectives;
 // The flag is monotone: once true it stays true for the world, which is exactly what the
 // progression wants and why a boss node latches like any other.
 internal sealed class Defeat(
+    string key,
     string label,
     ICreatures creatures,
     IInventory bag,
@@ -25,6 +26,8 @@ internal sealed class Defeat(
     Func<bool> downed) : IObjective
 {
     private readonly ICreatures _creatures = creatures;
+
+    public string Key => key;
 
     public string Label => label;
 

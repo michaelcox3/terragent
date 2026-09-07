@@ -4,22 +4,36 @@ using Terragent.Work.Objectives;
 
 namespace Terragent.Work;
 
-/// <summary>One objective in the graph, with the name it is saved under.</summary>
-/// <param name="Key">What goes in the player file. Stable across versions, unlike a position.</param>
-/// <param name="Objective">What it takes to be true, and the work that would do it.</param>
-/// <param name="Requires">Keys that have to be reached before this can be worked on.</param>
-/// <param name="Standing">
-/// Whether it is a supply, which is never recorded and always checked first.
-/// </param>
-// A supply is a node like any other, requiring whatever made it affordable, rather than a
-// list hanging off one. That is what gives it a key to be named by, a label to be shown
-// and requirements to wait on, and it means the file has one shape rather than two.
+/// <summary>One objective in the graph, with the nodes it waits on.</summary>
+// The nodes and their edges are the graph; there is no collection class above them. The
+// only question anyone asks of the run is whether everything a node waits on has been
+// reached, and that is a walk of one node's own list.
 //
-// Standing is the whole difference: a supply goes short again and so is never recorded,
-// and it is checked before the graph because the objective is what spends the torches.
+// The edges point back at what came before rather than forward at what follows, because
+// that is the direction the question is asked in. Successors would have to be searched
+// every time to answer it.
 //
-// The key and the edges live out here rather than on the objective. An objective is a
-// statement about the world and knows nothing about the run it belongs to; the same one
-// could sit in two graphs under two names.
-internal sealed record Node(string Key, IObjective Objective, IReadOnlyList<string> Requires,
-    bool Standing);
+// Nodes rather than keys. A requirement naming a key that nothing defines was silently a
+// node that could never become ready, and no log said so; holding the node itself makes
+// that impossible to write down rather than something to check for.
+//
+// Edges only. What the node is called and what it takes to be true both belong to the
+// objective, which is where a reader looks for them; all this adds is where it sits.
+internal sealed class DagNode(IObjective objective)
+{
+    private readonly List<DagNode> _dependsOn = [];
+
+    /// <summary>What it takes to be true, and the work that would do it.</summary>
+    public IObjective Objective => objective;
+
+    /// <summary>What has to be reached before this can be worked on.</summary>
+    public IReadOnlyList<DagNode> DependsOn => _dependsOn;
+
+    /// <summary>Wire an edge, which only the loader does and only once.</summary>
+    // A list that is filled and then never touched again. Nodes can name each other in
+    // any order in the file, so they are all made before any of them is wired, and there
+    // is no way to hold a finished node while its edges are still arriving.
+    internal void Needs(DagNode other) => _dependsOn.Add(other);
+
+    public override string ToString() => objective.Key;
+}

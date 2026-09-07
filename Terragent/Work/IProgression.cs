@@ -22,14 +22,17 @@ internal interface IProgression
     // back out of it next session. The graph owns the naming; nothing else needs one.
     IReadOnlyCollection<string> Reached { get; }
 
-    /// <summary>Every node of the run, in the order the file lists them.</summary>
+    /// <summary>Every objective of the run, in the order the file lists them.</summary>
     // For the panel, so the run can be read as a list rather than one line at a time.
-    IReadOnlyList<Node> Nodes { get; }
+    // Nodes, because a reader wants what comes next and that is an edge away.
+    IReadOnlyList<DagNode> Objectives { get; }
 
-    /// <summary>The objective to work on now, or null when the run is over.</summary>
-    // The first unmet one with everything it requires already reached. No effect: asking
-    // where the run is does not move it.
-    IObjective? Next();
+    /// <summary>Every objective being worked right now, supplies among them.</summary>
+    // The graph allows several at once, so this is a list and not a line. A method
+    // because working it out is real work on the tick after something completes.
+    IReadOnlyList<IObjective> Active();
+
+
 
     /// <summary>Record every objective that is met right now, so spending it cannot undo it.</summary>
     // The one thing that moves the run forward, and it happens by looking rather than by

@@ -22,7 +22,7 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
     private readonly IBody _body = body;
     private readonly IPilot _pilot = pilot;
 
-    private IObjective? _objective;
+    private IReadOnlyList<IObjective> _objectives = [];
 
     /// <summary>How long to wait before looking for work again after finding none.</summary>
     // Not a judgement about any job. A search that reaches nothing costs most of a frame,
@@ -39,17 +39,20 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
     /// <summary>When it last went looking for something to do.</summary>
     private double _looked;
 
-    public IObjective? Objective
+    public IReadOnlyList<IObjective> Objectives
     {
-        get => _objective;
+        get => _objectives;
         set
         {
-            if (ReferenceEquals(value, _objective))
+            // By instance, which works because the progression keeps one list and hands
+            // back the same one until the graph moves on. A fresh list every tick would
+            // drop the job every tick.
+            if (ReferenceEquals(value, _objectives))
             {
                 return;
             }
 
-            _objective = value;
+            _objectives = value;
             Drop();
         }
     }
@@ -65,12 +68,13 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
 
     public void Tick()
     {
-        if (_objective is not { } objective)
+        if (_objectives.Count == 0)
         {
             Drop();
             return;
         }
 
+        // If the current job is spent, announce it and drop it.
         if (Spent())
         {
             Said();
@@ -79,23 +83,14 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
 
         if (Job is null && clock.Now - _looked >= RestSeconds)
         {
-            Choose(objective);
+            Choose();
         }
 
-        if (Job is not { } job || Destination is not { } site)
+        IJob? job = Job;
+        if (job is null || Destination is not { } site)
         {
             return;
         }
-
-        // Travel or work, never both. Arrival is the pilot's answer to a question the
-        // foreman cannot answer itself, since being near the tile is not the same as being
-        // able to reach it.
-        // Written through Change, so it is one line per state and silent while nothing
-        // moves. A run that wedges then shows what it was holding when it stopped, which
-        // is the thing the log could not say before.
-        journal.Change("holding", $"{job.Label} at ({site.Site.X}, {site.Site.Y}), "
-            + $"{_pilot.Progress.ToString().ToLowerInvariant()}, "
-            + $"body at ({_body.Footing.X}, {_body.Footing.Y})");
 
         // Through Change, so it is one line per state and silent while nothing moves. A
         // run that wedges then says what it was holding when it stopped, which the log
@@ -103,6 +98,10 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         journal.Change("holding", $"{job.Label} at ({site.Site.X}, {site.Site.Y}), "
             + $"{_pilot.Progress.ToString().ToLowerInvariant()}, "
             + $"body at ({_body.Footing.X}, {_body.Footing.Y})");
+
+        // Travel or work, never both. Arrival is the pilot's answer to a question the
+        // foreman cannot answer itself, since being near the tile is not the same as being
+        // able to reach it.
 
         if (_pilot.Progress is Progress.Arrived)
         {
@@ -136,11 +135,19 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
     //
     // It also means an unreachable candidate is never chosen. The search simply does not
     // settle on it, so there is nothing to fail at afterwards.
-    private void Choose(IObjective objective)
+    private void Choose()
     {
         _looked = clock.Now;
         Point from = _body.Footing;
-        IReadOnlyList<IJob> offered = objective.Jobs();
+
+        // One pool out of all of them. Which objective a job came from stops mattering
+        // the moment it is offered: a crystal underfoot beats ore ten tiles away whatever
+        // either of them is for.
+        List<IJob> offered = [];
+        foreach (IObjective objective in _objectives)
+        {
+            offered.AddRange(objective.Jobs());
+        }
 
         List<(IJob Job, Offer Offer)> candidates = [];
         List<Destination> destinations = [];
@@ -148,8 +155,14 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         {
             // Finished work is not work. A hunt whose creature is already in view is done
             // before it starts, and choosing it means dropping it on the same tick and
-            // paying for a search to do so.
-            if (job.Done || job.Nearest(from) is not { } offer)
+            // paying for a search to do so. Asked before Nearest, which sweeps the ground.
+            if (job.Done)
+            {
+                continue;
+            }
+
+            Offer? offer = job.Nearest(from);
+            if (offer is null)
             {
                 continue;
             }
@@ -161,18 +174,25 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         // Nothing any of them offered can be walked to this instant. Nothing is set aside
         // for it: a slime in mid jump is unreachable for one frame and every bit as worth
         // fighting when it lands.
-        if (_pilot.Reachable(destinations, out int which) is not { } route)
+        RouteMatch? reached = _pilot.FindRoute(destinations);
+        if (reached is null)
         {
+            // Said out loud, because this and an empty offer read the same in a log: both
+            // are a run that stops choosing. One is a hole in the progression and the other
+            // is a body in a pit, and they want opposite fixes.
+            journal.Change("idle", $"nothing reachable from "
+                + $"({from.X}, {from.Y}): {candidates.Count} sites offered of "
+                + $"{offered.Count} jobs");
             return;
         }
 
         // By its place in the list, which is what the search reached. Matching the tile
         // back instead cannot tell two jobs offering the same one apart.
-        (IJob taken, Offer won) = candidates[which];
+        (IJob taken, Offer won) = candidates[reached.Index];
         Job = taken;
         Target = won.Target;
         Destination = won.Destination;
-        _pilot.Follow(won.Destination, route);
+        _pilot.Follow(won.Destination, reached.Route);
 
         journal.Note("chose",
             $"{taken.Label} at ({won.Destination.Site.X}, {won.Destination.Site.Y}), "
@@ -182,7 +202,8 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
     /// <summary>Why the job in hand is being let go, while it can still be asked.</summary>
     private void Said()
     {
-        if (Job is not { } job)
+        IJob? job = Job;
+        if (job is null)
         {
             return;
         }

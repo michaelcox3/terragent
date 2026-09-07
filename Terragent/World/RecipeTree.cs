@@ -113,6 +113,40 @@ internal sealed class RecipeTree(IReadOnlyList<CraftingRecipe> book, Func<int, b
         return totals;
     }
 
+    /// <summary>Every station this tree is worked at, and the item that puts each down.</summary>
+    // Read off the tree rather than off the recipe book, so the answer is the stations a
+    // run will actually stand at and not the two dozen vanilla has. That is what makes it
+    // cheap to sweep the ground for one of them.
+    public static IReadOnlyDictionary<int, int> Stations(Need node)
+    {
+        Dictionary<int, int> found = [];
+        Standing(node, found, []);
+        return found;
+    }
+
+    private static void Standing(Need node, Dictionary<int, int> found, HashSet<int> seen)
+    {
+        if (!seen.Add(node.ItemID))
+        {
+            return;
+        }
+
+        foreach ((Need station, int tileID) in node.Stations)
+        {
+            found[tileID] = station.ItemID;
+            Standing(station, found, seen);
+        }
+
+        foreach ((Need part, int _, IReadOnlyList<Need> instead) in node.Needs)
+        {
+            Standing(part, found, seen);
+            foreach (Need other in instead)
+            {
+                Standing(other, found, seen);
+            }
+        }
+    }
+
     /// <summary>The next thing to make, or null when nothing can be made yet.</summary>
     // The deepest node whose parts are all in hand. Crafting is bottom up: ore becomes
     // bars, bars become an anvil, and asking the game to make the pickaxe while the bars
