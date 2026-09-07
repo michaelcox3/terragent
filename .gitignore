@@ -43,3 +43,8 @@ CLAUDE.md
 *.local.json
 docs/
 plans/
+
+# The mod this one replaced, kept locally to migrate from and not part of the repo
+TerragentOld/
+TerragentOld.sln
+Tests/TerragentOld.UnitTests/
