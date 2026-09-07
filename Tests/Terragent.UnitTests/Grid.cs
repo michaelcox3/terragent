@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
-namespace Terragent;
+namespace Terragent.UnitTests;
 
 /// <summary>
 /// Terrain typed out as text, for exercising the search without a world.
@@ -92,7 +92,7 @@ internal sealed class Grid : ITerrain
     // about crossing a gap gets crossed underneath instead, on ground that is not in
     // the drawing. Case.Border turns it off, as it does in the arena.
     private char At(int x, int y) =>
-        y < -Body.Height ? Outside
+        y < -Hitbox.Height ? Outside
         : y < 0 ? '.'
         : x < 0 || x >= Width || y >= Height ? Outside
         : _rows[y][x];
@@ -106,7 +106,7 @@ internal sealed class Grid : ITerrain
         // A work bench: not solid, but standable on top, which is a platform.
         '=' or 'B' => TileKind.Platform,
 
-        // Rock that fills the bottom of its cell. Belief says the same of a half
+        // Rock that fills the bottom of its cell. Terrain says the same of a half
         // block and a floor slope: stood on like a platform, occupied like a wall.
         '_' or '/' or '\\' => TileKind.Slab,
         '?' => TileKind.Unknown,
@@ -116,7 +116,7 @@ internal sealed class Grid : ITerrain
     public int TypeAt(int x, int y) => At(x, y) == 'H' ? Hard : Ordinary;
 
     /// <summary>A cell with no tile drawn in it, water included, takes a block.</summary>
-    // As the game has it: Belief asks only whether the cell holds a tile, and Terraria
+    // As the game has it: Terrain asks only whether the cell holds a tile, and Terraria
     // places into water and displaces it. Refusing water here meant the harness could
     // not plan a pillar out of a pool that the arena builds and the agent actually
     // stood in.
@@ -125,7 +125,7 @@ internal sealed class Grid : ITerrain
     public bool IsKnown(int x, int y) => KindAt(x, y) is not TileKind.Unknown;
 
     // Clearance and standability are ITerrain's own, derived from KindAt. This class
-    // used to write its own copies and they drifted from Belief's, so a scenario could
+    // used to write its own copies and they drifted from Terrain's, so a scenario could
     // pass here and fail in the arena with each level telling the truth about its own
     // idea of how tall the character is.
 
@@ -140,7 +140,7 @@ internal sealed class Grid : ITerrain
         // Outside the grid is the edge of the world, not rock with more rock behind
         // it. Letting the search mine into it opens an unbounded region of diggable
         // border, and "do not walk into fog" then runs out of nodes before reaching a
-        // goal ten tiles away. Belief gets this right for free, since IsKnown is false
+        // goal ten tiles away. Terrain gets this right for free, since IsKnown is false
         // outside the world, so the fake was the one lying.
         if (x < 0 || y < 0 || x >= Width || y >= Height)
         {
@@ -249,7 +249,7 @@ internal sealed class Grid : ITerrain
         // alignment, three rows because 42 pixels of body needs more than 32 of gap.
         if (feet is { } stand)
         {
-            foreach (Point cell in Body.Cells(stand))
+            foreach (Point cell in Hitbox.Cells(stand))
             {
                 if (cell.Y >= 0 && cell.Y < Height && cell.X >= 0 && cell.X < Width)
                 {

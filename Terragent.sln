@@ -3,34 +3,31 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "mod", "mod", "{B5CAB741-F843-454A-B87C-BCDF18143A07}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{95B2DD03-D253-4911-8246-70F8DE83FA0A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Terragent", "Terragent\Terragent.csproj", "{2E60EFCB-186F-4D5B-9CB1-0C64947FC27F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Terragent.UnitTests", "Tests\Terragent.UnitTests\Terragent.UnitTests.csproj", "{1AE1967F-0557-4A56-9606-0A513CFC46BF}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{DEE54F0A-BC3E-48A6-9A68-D423DB5923C0}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Terragent.UnitTests", "Tests\Terragent.UnitTests\Terragent.UnitTests.csproj", "{472CD236-3244-4611-8281-DE74BC6E19DB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Terragent", "Terragent\Terragent.csproj", "{2028CF9B-65B1-4F3A-A0D5-0B68ECE99F61}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1AE1967F-0557-4A56-9606-0A513CFC46BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1AE1967F-0557-4A56-9606-0A513CFC46BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1AE1967F-0557-4A56-9606-0A513CFC46BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1AE1967F-0557-4A56-9606-0A513CFC46BF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2028CF9B-65B1-4F3A-A0D5-0B68ECE99F61}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2028CF9B-65B1-4F3A-A0D5-0B68ECE99F61}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2028CF9B-65B1-4F3A-A0D5-0B68ECE99F61}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2028CF9B-65B1-4F3A-A0D5-0B68ECE99F61}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{2E60EFCB-186F-4D5B-9CB1-0C64947FC27F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2E60EFCB-186F-4D5B-9CB1-0C64947FC27F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2E60EFCB-186F-4D5B-9CB1-0C64947FC27F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2E60EFCB-186F-4D5B-9CB1-0C64947FC27F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{472CD236-3244-4611-8281-DE74BC6E19DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{472CD236-3244-4611-8281-DE74BC6E19DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{472CD236-3244-4611-8281-DE74BC6E19DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{472CD236-3244-4611-8281-DE74BC6E19DB}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{2E60EFCB-186F-4D5B-9CB1-0C64947FC27F} = {B5CAB741-F843-454A-B87C-BCDF18143A07}
-		{472CD236-3244-4611-8281-DE74BC6E19DB} = {DEE54F0A-BC3E-48A6-9A68-D423DB5923C0}
+		{1AE1967F-0557-4A56-9606-0A513CFC46BF} = {95B2DD03-D253-4911-8246-70F8DE83FA0A}
 	EndGlobalSection
 EndGlobal

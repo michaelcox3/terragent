@@ -1,214 +1,133 @@
-using System;
 using System.Collections.Generic;
 using Terraria;
 using Terraria.ID;
 
 namespace Terragent.World;
 
-/// <summary>
-/// What a recipe needs, and which recipe to follow when there is a choice.
-/// </summary>
-// Everything that reads Main.recipe. It knows nothing about the character beyond what
-// is carried, remembers nothing between calls, and never touches the controls.
+/// <summary>The game's recipes, as the agent needs to see them.</summary>
+// Read once at load and turned into a book of needs. The game's own Recipe is not walked
+// directly, for two reasons: it cannot be referenced outside the game, which is what lets
+// the whole recipe walk be checked with no world loaded, and it leaves two questions
+// unanswered that every step of the walk asks.
+//
+// The first is what may stand in for what. Terraria keeps that as a list of group ids on
+// the recipe and the members in a separate table, so following iron to lead is two lookups
+// away from the recipe that needs it.
+//
+// The second is which item puts a station down. A recipe names the tile it must be worked
+// at and nothing says a Work Bench tile comes out of a Work Bench item, so the agent could
+// tell it was missing a bench and not what to make.
 internal static class Recipes
 {
-    /// <summary>How far to follow ingredients when judging a recipe.</summary>
-    // Two is ore to bar to tool. Deeper is a supply chain the run does not have.
-    public const int Depth = 2;
+    private static Dictionary<int, int>? _placers;
 
-    public static Recipe? RecipeFor(int itemID)
+    /// <summary>Every recipe in the game, in the shape the walk reads.</summary>
+    public static IReadOnlyList<CraftingRecipe> Book()
     {
-        Recipe? indirect = null;
-        for (int i = 0; i < Recipe.numRecipes; i++)
+        List<CraftingRecipe> book = [];
+        for (int n = 0; n < Recipe.numRecipes; n++)
         {
-            Recipe recipe = Main.recipe[i];
-            if (recipe.createItem.type != itemID)
+            Recipe recipe = Main.recipe[n];
+            if (recipe.createItem.IsAir)
             {
                 continue;
             }
 
-            // Materials gettable outright beat ones that need further crafting, or a
-            // Work Bench reads as made of Wood Platforms rather than ten wood.
-            if (Gettable(recipe, 0, itemID))
-            {
-                return recipe;
-            }
-
-            indirect ??= Gettable(recipe, Depth, itemID) ? recipe : null;
+            book.Add(new CraftingRecipe(
+                recipe.createItem.type,
+                recipe.createItem.stack,
+                Parts(recipe),
+                Stations(recipe)));
         }
 
-        // No fallback. A recipe just judged unfollowable, handed back anyway, makes
-        // SourcesOf advertise crafting and the executor chase it all run. Wood (whose
-        // only recipe turns two platforms back into one) is that case.
-        return indirect;
+        return book;
     }
 
-    /// <summary>Whether every ingredient is something the agent could go and get.</summary>
-    // The first recipe in the table is often not the one a player would use: an Iron
-    // Bar is smelted from ore, and is also what recycling an Iron Fence gives back.
-    public static bool Gettable(Recipe recipe, int depth, int making)
+    /// <summary>Whether the world hands this over without a recipe.</summary>
+    // Gathered rather than made. Wood has a recipe and is still something you chop, and
+    // the walk has to be told which of the two a run should do.
+    //
+    // Two sources, because there are two ways the world gives a thing up: break something
+    // for it, or kill something for it. Gel is the second and has no tile at all.
+    public static bool Gathered(int itemID) =>
+        Mining.Yields(itemID).Count > 0 || Loot.Dropped(itemID);
+
+    private static IReadOnlyList<(int ItemID, int TileID)> Stations(Recipe recipe)
     {
-        foreach (Item required in recipe.requiredItem)
-        {
-            if (required.IsAir)
-            {
-                continue;
-            }
-
-            // A recipe that wants the thing being made is not a way to it: bars make
-            // a fence and the fence recycles into bars, so each would justify the other.
-            if (required.type == making)
-            {
-                return false;
-            }
-
-            if (Sources.InTheWorld(required.type))
-            {
-                continue;
-            }
-
-            // Made rather than found. The depth limit also stops two recipes that
-            // produce each other from being followed round for ever.
-            if (depth <= 0 || MakeableFrom(required.type, depth - 1, making) is null)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>A followable recipe for an ingredient, without reconsidering the goal.</summary>
-    public static Recipe? MakeableFrom(int itemID, int depth, int making)
-    {
-        for (int i = 0; i < Recipe.numRecipes; i++)
-        {
-            Recipe recipe = Main.recipe[i];
-            if (recipe.createItem.type == itemID && Gettable(recipe, depth, making))
-            {
-                return recipe;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// The whole tree of what a thing is made of, down to what nothing makes.
-    /// </summary>
-    // A fact about Terraria only: no belief, inventory or position. Requirements prunes
-    // this against what is carried. Every alternative is expanded, not the likeliest,
-    // because which is worth going for depends on where the agent stands. Bounded by
-    // depth and by path, since wood becomes platforms and platforms become wood.
-    public static Need Tree(int itemID, int depth)
-    {
-        if (_trees.TryGetValue((itemID, depth), out Need? known))
-        {
-            return known;
-        }
-
-        Need built = Tree(itemID, 1, 0, depth, []);
-        _trees[(itemID, depth)] = built;
-        return built;
-    }
-
-    /// <summary>Trees already built, because the answer cannot change.</summary>
-    // Recipes are fixed once loaded, and RecipeFor walks thousands of entries at every
-    // node on every planning tick. Keyed on the root only: a subtree's shape depends on
-    // what lay above it (the cycle guard), so only a whole walk repeats exactly.
-    private static readonly Dictionary<(int ItemID, int Depth), Need> _trees = [];
-
-    private static Need Tree(int itemID, int perCraft, int stationTile, int depth,
-        HashSet<int> above)
-    {
-        if (depth <= 0 || !above.Add(itemID))
-        {
-            return new Need(itemID, perCraft, stationTile, null, [], []);
-        }
-
-        if (RecipeFor(itemID) is not { } recipe)
-        {
-            // Unmarked on the way out, or a raw thing met once would read as already
-            // walked for the rest of the tree.
-            above.Remove(itemID);
-            return new Need(itemID, perCraft, stationTile, null, [], []);
-        }
-
-        // Stations first, then materials. A station is an ordinary need with its own
-        // recipe under it, marked with the tile it puts down so pruning can tell that
-        // standing beside one satisfies it. Per-craft of one: using it consumes nothing.
-        List<Need> needs = [];
+        List<(int ItemID, int TileID)> stations = [];
         foreach (int tileID in recipe.requiredTile)
         {
-            if (tileID <= 0 || StationKinds.ItemFor(tileID) is not (var carried and not 0))
+            if (tileID > 0 && Places(tileID) is > 0 and int item)
             {
-                continue;
-            }
-
-            needs.Add(Tree(carried, 1, tileID, depth - 1, above));
-        }
-
-        foreach (Item required in recipe.requiredItem)
-        {
-            if (required.IsAir)
-            {
-                continue;
-            }
-
-            // One node per ingredient, with the substitutes as Instead: they are an
-            // "or", and eight kinds of wood in Needs is a torch that wants all eight.
-            List<Need> choices = [];
-            foreach (int alternative in Accepts(recipe, required))
-            {
-                choices.Add(Tree(alternative, required.stack, 0, depth - 1, above));
-            }
-
-            if (choices.Count > 0)
-            {
-                needs.Add(choices[0] with { Instead = choices.GetRange(1, choices.Count - 1) });
+                stations.Add((item, tileID));
             }
         }
 
-        above.Remove(itemID);
-        return new Need(itemID, perCraft, stationTile, recipe, needs, []);
+        return stations;
     }
 
-    /// <summary>The items that would satisfy this ingredient, substitutes included.</summary>
-    // Terraria states "Iron Bar" and accepts a Lead Bar through a recipe group. Reading
-    // requiredItem alone sends a lead world digging for iron that does not exist in it.
-    public static List<int> Accepts(Recipe recipe, Item required)
+    private static IReadOnlyList<(int ItemID, int Count, IReadOnlyList<int> Instead)> Parts(
+        Recipe recipe)
     {
-        List<int> items = [required.type];
+        List<(int ItemID, int Count, IReadOnlyList<int> Instead)> parts = [];
+        foreach (Item want in recipe.requiredItem)
+        {
+            if (want.IsAir)
+            {
+                continue;
+            }
+
+            parts.Add((want.type, want.stack, Instead(recipe, want.type)));
+        }
+
+        return parts;
+    }
+
+    /// <summary>What else this recipe would take in place of a part.</summary>
+    // A group holds every item that satisfies it, the wanted one included, so the wanted
+    // one is dropped or a bar would read as substitutable for itself.
+    private static IReadOnlyList<int> Instead(Recipe recipe, int itemID)
+    {
+        List<int> instead = [];
         foreach (int id in recipe.acceptedGroups)
         {
             if (!RecipeGroup.recipeGroups.TryGetValue(id, out RecipeGroup? group)
-                || !group.ContainsItem(required.type))
+                || !group.ContainsItem(itemID))
             {
                 continue;
             }
 
-            foreach (int alt in group.ValidItems)
+            foreach (int other in group.ValidItems)
             {
-                if (!items.Contains(alt))
+                if (other != itemID)
                 {
-                    items.Add(alt);
+                    instead.Add(other);
                 }
             }
         }
 
-        return items;
+        return instead;
     }
 
+    /// <summary>The item that puts this tile down, or zero when nothing does.</summary>
+    // Built once by walking every item and asking what it places, because the game keeps
+    // the mapping only in that direction.
+    private static int Places(int tileID)
+    {
+        if (_placers is null)
+        {
+            _placers = [];
+            for (int item = 0; item < ItemID.Count; item++)
+            {
+                int tile = ContentSamples.ItemsByType[item].createTile;
+                if (tile > 0 && !_placers.ContainsKey(tile))
+                {
+                    _placers[tile] = item;
+                }
+            }
+        }
 
-
-
-
-
-
-
-
-
-
-
+        return _placers.TryGetValue(tileID, out int placer) ? placer : 0;
+    }
 
 }

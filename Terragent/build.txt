@@ -1,5 +1,5 @@
-﻿displayName = Terragent
+displayName = Terragent
 author = Michael Cox
-version = 0.52.0
+version = 1.0
 side = Client
 homepage = https://github.com/michaelcox3/terragent

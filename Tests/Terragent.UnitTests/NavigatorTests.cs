@@ -23,7 +23,7 @@ public class NavigatorTests
     /// What the base character's jump reaches, from the game's own constants: fifteen
     /// powered frames at 5.01, gravity 0.4, run acceleration 0.08 up to 3.
     /// </summary>
-    private static readonly Leap Jump = Leap.Of(15, 5.01f, 0.4f, 0.08f, 3f);
+    private static readonly Leap Jump = new(6, [6, 6, 5, 5, 4, 3, 2]);
 
     /// <summary>What a scenario's moves cost. No scenario carries a glowstick.</summary>
     private static readonly Costs Prices = new(Walk, Mine, Place, 10f, 1.5f, 1f);
@@ -43,8 +43,12 @@ public class NavigatorTests
         // not a footing and must not be turned into one.
         Point to = Floor(grid, grid.Find(test.Goal));
 
-        List<Step>? route = new Navigator(grid).FindRoute(Prices, PickPower, Jump, from, to,
-            blocks: test.Blocks)?.Steps as List<Step>;
+        List<Step>? route = new Navigator(grid).FindRoute(
+            from,
+            [new Destination(to, Within: 0)],
+            new Ability(Prices, PickPower, Jump, test.Blocks),
+            new HashSet<(Point, Point)>(),
+            out _)?.Steps as List<Step>;
         string? complaint = Judge(test, grid, route);
 
         if (complaint is null)
@@ -81,21 +85,30 @@ public class NavigatorTests
         // Twelve pixels of ore, lying at the bottom of the hole in column 2.
         Rectangle ore = new(34, 52, 12, 12);
 
-        Assert.False(Body.Touches(over, ore),
+        Assert.False(Hitbox.Touches(over, ore),
             "the footing over the hole should not touch ore lying in it");
-        Assert.True(Body.Touches(new Point(2, 4), ore),
+        Assert.True(Hitbox.Touches(new Point(2, 4), ore),
             "a footing one row down, the hole widened, should touch it");
-        Assert.True(Body.Touches(over, new Rectangle(50, 36, 12, 12)),
+        Assert.True(Hitbox.Touches(over, new Rectangle(50, 36, 12, 12)),
             "ore on the floor beside the feet should be touched");
-        Assert.False(Body.Touches(over, new Rectangle(34, -8, 12, 12)),
+        Assert.False(Hitbox.Touches(over, new Rectangle(34, -8, 12, 12)),
             "ore a row above the head should not be touched");
 
         Assert.Equal(48, grid.Landing(new Rectangle(42, 0, 12, 12)).Bottom);
         Assert.Equal(64, grid.Landing(new Rectangle(34, 0, 12, 12)).Bottom);
         Assert.Equal(new Rectangle(50, 36, 12, 12), grid.Landing(new Rectangle(50, 36, 12, 12)));
 
-        Route? route = new Navigator(grid).FindRoute(Prices, PickPower, Jump,
-            over, new Point(2, 3), arrived: node => Body.Touches(node, ore));
+        Route? route = new Navigator(grid).FindRoute(
+            over,
+            [
+                new Destination(new Point(2, 3), Within: 0)
+                {
+                    Arrived = node => Hitbox.Touches(node, ore),
+                },
+            ],
+            new Ability(Prices, PickPower, Jump, 0),
+            new HashSet<(Point, Point)>(),
+            out _);
         Assert.NotNull(route);
         Assert.True(route.Steps.Count > 0,
             "the search should not call the footing over the hole arrived");
@@ -103,6 +116,70 @@ public class NavigatorTests
             route.Steps.Any(step => step.Removes.Contains(new Point(3, 3)))
             && route.Steps[^1].To == new Point(2, 4),
             "the route should dig the floor beside the hole and drop a row");
+    }
+
+    /// <summary>
+    /// Choosing among offers asks each one what counts as arriving, not a radius.
+    /// </summary>
+    // The stone that stopped a run: an offer chosen because a radius said three rows was
+    // near enough, then a body on the ledge above it holding a pickaxe it could not swing
+    // that far down. Both searches below are the offer search, over one goal, differing
+    // only in what the destination says arriving is. They must settle in different places.
+    [Fact]
+    public void ChoosingAmongOffersAsksEachHowCloseCounts()
+    {
+        Grid grid = new(true,
+            "         ",
+            "         ",
+            "#########");
+
+        Navigator search = new(grid);
+        Ability able = new(Prices, PickPower, Jump, 0);
+        Point from = new(1, 2);
+        Point goal = new(7, 2);
+
+        Route? loose = search.FindRoute(from, [new Destination(goal, Within: 3)], able,
+            new HashSet<(Point, Point)>(), out _);
+
+        Route? fussy = search.FindRoute(
+            from,
+            [
+                new Destination(goal, Within: 3)
+                {
+                    Arrived = footing => footing.X >= goal.X - 1,
+                },
+            ],
+            able,
+            new HashSet<(Point, Point)>(),
+            out _);
+
+        Assert.NotNull(loose);
+        Assert.NotNull(fussy);
+        Assert.Equal(3, loose.Steps[^1].To.X);
+        Assert.Equal(6, fussy.Steps[^1].To.X);
+    }
+
+    /// <summary>The search names the goal it settled on, rather than the nearest one.</summary>
+    // By its place in the list it was handed. A point handed back has to be matched
+    // against that list again to learn what it belonged to, and two candidates standing
+    // on one tile cannot be told apart at all.
+    [Fact]
+    public void SettledNamesWhichGoalStoppedTheSearch()
+    {
+        Grid grid = new(true,
+            "          ",
+            "          ",
+            "##########");
+
+        Route? route = new Navigator(grid).FindRoute(
+            new Point(1, 2),
+            [new Destination(new Point(8, 2)), new Destination(new Point(3, 2))],
+            new Ability(Prices, PickPower, Jump, 0),
+            new HashSet<(Point, Point)>(),
+            out int which);
+
+        Assert.NotNull(route);
+        Assert.Equal(1, which);
     }
 
     /// <summary>
@@ -145,7 +222,7 @@ public class NavigatorTests
         {
             Point footing = new(left, floor.Y);
             bool room = grid.Standable(footing);
-            foreach (Point cell in Body.Cells(footing))
+            foreach (Point cell in Hitbox.Cells(footing))
             {
                 room &= grid.Passable(cell.X, cell.Y);
             }

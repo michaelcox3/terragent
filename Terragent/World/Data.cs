@@ -64,6 +64,23 @@ internal static class Data
         return [.. items];
     }
 
+    /// <summary>NPC ids from their <see cref="NPCID"/> names.</summary>
+    public static int[] Creatures(JsonElement parent, string field)
+    {
+        if (!parent.TryGetProperty(field, out JsonElement list))
+        {
+            return [];
+        }
+
+        List<int> creatures = [];
+        foreach (JsonElement name in list.EnumerateArray())
+        {
+            creatures.Add(Creature(name.GetString() ?? ""));
+        }
+
+        return [.. creatures];
+    }
+
     public static string[] Strings(JsonElement parent, string field)
     {
         if (!parent.TryGetProperty(field, out JsonElement list))

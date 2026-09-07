@@ -1,16 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Headless unit tests for the parts of the mod that name no Terraria type: the
-    pathfinder, the follower's step logic, and plain data shapes. Compiles the mod's own
-    files rather than copies of them: a copy would drift, and the whole value here is
-    testing the real thing.
-
-    The only outside types those files use are Point, Rectangle and Vector2. In game they
-    come from the FNA.dll in the tModLoader install; here they come from MonoGame, which
-    reimplements the same XNA namespace and is on NuGet. That is what lets CI run these
-    tests on a machine with no game installed. MonoGame is a compile-time source of three
-    structs, not an engine this project runs on.
+    Everything here runs with no game, no Terraria reference and no world. The recipe tree
+    is arithmetic over a table of formulas, written out by hand; the search is arithmetic
+    over a picture of ground, typed out as text. Both take what they need as arguments,
+    which is what lets them be checked at all.
   -->
 
   <PropertyGroup>
@@ -20,45 +14,46 @@
     <RootNamespace>Terragent.UnitTests</RootNamespace>
     <IsPackable>false</IsPackable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <!-- The scenarios live behind this in the mod, so that the arena and its
-         world-building do not ship in a published build. This project is the other
-         half of the same test level and needs them. -->
-    <DefineConstants>$(DefineConstants);TESTING</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+
+    <!-- Point, Rectangle and Vector2 only. In game those come from the FNA in the
+         tModLoader install; here from MonoGame, which reimplements the same XNA namespace
+         and is on NuGet, so none of this needs the game installed. -->
     <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.1.303" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The pathfinder and the follower's decision half, compiled from the mod. -->
-    <Compile Include="..\..\Terragent\Search\Navigator.cs" />
-    <Compile Include="..\..\Terragent\Search\Route.cs" />
-    <Compile Include="..\..\Terragent\World\Terrain.cs" />
-    <Compile Include="..\..\Terragent\World\Costs.cs" />
-    <Compile Include="..\..\Terragent\World\Leap.cs" />
-    <Compile Include="..\..\Terragent\World\Step.cs" />
-    <Compile Include="..\..\Terragent\World\ItemQuantity.cs" />
-    <Compile Include="..\..\Terragent\World\Source.cs" />
-    <Compile Include="..\..\Terragent\Plan\Candidate.cs" />
-    <Compile Include="..\..\Terragent\Follow\Progress.cs" />
-    <Compile Include="..\..\Terragent\Follow\Steering.cs" />
-    <!-- The scenario list, shared with the arena. This project reaches in, rather than
-         the mod reaching out; a copy here would be a synchronised duplicate. -->
-    <Compile Include="..\..\Terragent\Tests\Scenarios.cs" />
+    <!-- Compiled from the mod rather than copied: a copy would drift. -->
+    <Compile Include="..\..\Terragent\World\IRecipeTree.cs" />
+    <Compile Include="..\..\Terragent\World\RecipeTree.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Ability.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\INavigator.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Navigator.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Route.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Step.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Costs.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Leap.cs" />
+    <Compile Include="..\..\Terragent\World\Hitbox.cs" />
+    <Compile Include="..\..\Terragent\World\ITerrain.cs" />
+    <Compile Include="..\..\Terragent\World\TileKind.cs" />
+    <Compile Include="..\..\Terragent\World\Ground.cs" />
+    <Compile Include="..\..\Terragent\World\CraftingRecipe.cs" />
+    <Compile Include="..\..\Terragent\World\Need.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\StepKind.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Edge.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Destination.cs" />
 
     <Compile Include="GlobalUsings.cs" />
+    <Compile Include="Scenarios.cs" />
     <Compile Include="Grid.cs" />
+    <Compile Include="RecipeTreeTests.cs" />
     <Compile Include="NavigatorTests.cs" />
-    <Compile Include="LeapTests.cs" />
     <Compile Include="CostsTests.cs" />
-    <Compile Include="ItemQuantityTests.cs" />
-    <Compile Include="SteeringTests.cs" />
-    <Compile Include="CandidateTests.cs" />
-    <Compile Include="SearchCostProbe.cs" />
   </ItemGroup>
 
 </Project>

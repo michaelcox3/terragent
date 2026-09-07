@@ -1,109 +1,90 @@
 using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 using Terraria;
-using Terraria.GameContent.ItemDropRules;
-using Terraria.ID;
 
 namespace Terragent.World;
 
-/// <summary>
-/// What a creature drops, asked of the game rather than assumed.
-/// </summary>
-internal static class Drops
+/// <summary>What is lying about, as far as the player can see.</summary>
+// The second of the three files allowed to read the game's world state, and the only one
+// that names Main.item. Everything above it gets a Drop, which is an item, a count and a
+// box, and cannot go asking the game anything else.
+//
+// Gated on the map like the tiles are. Main.item holds every item in the world, and an
+// agent that read it whole would walk to ore it has never seen.
+internal sealed class Drops(ITerrain terrain) : IDrops
 {
-    private static readonly Dictionary<int, HashSet<int>> _cache = [];
+    private readonly ITerrain _terrain = terrain;
 
-    private static readonly Dictionary<int, List<int>> _sources = [];
+    /// <summary>How far out to look, in tiles.</summary>
+    private const int Far = 120;
 
-    /// <summary>
-    /// Every creature that can drop this item.
-    /// </summary>
-    public static IReadOnlyList<int> Droppers(int itemID)
+    public Drop? Nearest(Point from, IReadOnlyList<int> itemIDs)
     {
-        if (_sources.TryGetValue(itemID, out List<int>? known))
-        {
-            return known;
-        }
+        Vector2 me = Hitbox.Middle(from);
+        Drop? best = null;
+        float nearest = float.MaxValue;
 
-        List<int> found = [];
-        for (int type = 1; type < NPCID.Count; type++)
+        for (int n = 0; n < Main.maxItems; n++)
         {
-            if (ItemsFrom(type).Contains(itemID))
+            Item item = Main.item[n];
+            if (!item.active || item.IsAir || !Names(itemIDs, item.type))
             {
-                found.Add(type);
+                continue;
+            }
+
+            Point at = new((int)(item.Center.X / 16f), (int)(item.Center.Y / 16f));
+            if (Beyond(from, at) || !_terrain.IsKnown(at.X, at.Y))
+            {
+                continue;
+            }
+
+            float span = Vector2.DistanceSquared(me, item.Center);
+            if (span < nearest)
+            {
+                nearest = span;
+                best = new Drop(n, item.type, item.stack, item.getRect());
             }
         }
 
-        _sources[itemID] = found;
-        return found;
+        return best;
     }
 
-    /// <summary>
-    /// How many of an item one kill yields on average, counting the odds.
-    /// </summary>
-    // Straight out of the game's drop table, rather than a copy that goes stale the
-    // moment a version changes the numbers.
-    public static float PerKill(int npcNetID, int itemID)
+    // Null the moment it is taken. The slot is reused, so the kind is checked too: a
+    // stack of stone landing in the slot the wood left is not the wood.
+    public Drop? At(int index)
     {
-        float total = 0f;
-        try
+        if (index < 0 || index >= Main.maxItems)
         {
-            List<DropRateInfo> rates = [];
-            DropRateInfoChainFeed feed = new(1f);
-            foreach (IItemDropRule rule in Main.ItemDropsDB.GetRulesForNPCID(npcNetID))
-            {
-                rule.ReportDroprates(rates, feed);
-            }
-
-            foreach (DropRateInfo rate in rates)
-            {
-                if (rate.itemId == itemID)
-                {
-                    total += rate.dropRate * (rate.stackMin + rate.stackMax) / 2f;
-                }
-            }
-        }
-        catch (System.Exception)
-        {
-            // A mod's rule that will not report is not worth ending a run over.
+            return null;
         }
 
-        return total;
+        Item item = Main.item[index];
+        return item.active && !item.IsAir
+            ? new Drop(index, item.type, item.stack, item.getRect())
+            : null;
     }
 
-    /// <summary>Whether killing this creature can yield this item.</summary>
-    public static bool Yields(int npcNetID, int itemID) => ItemsFrom(npcNetID).Contains(itemID);
+    private static bool Beyond(Point from, Point at) =>
+        System.Math.Abs(at.X - from.X) > Far || System.Math.Abs(at.Y - from.Y) > Far;
 
-    /// <summary>
-    /// Everything this creature can drop.
-    /// </summary>
-    public static IReadOnlySet<int> ItemsFrom(int npcNetID)
+    /// <summary>Whether this is one of the kinds asked for. An empty list takes any.</summary>
+    // Empty means anything, because the commonest use is walking back over what the agent
+    // has just broken and it wants all of it.
+    private static bool Names(IReadOnlyList<int> itemIDs, int itemID)
     {
-        if (_cache.TryGetValue(npcNetID, out HashSet<int>? known))
+        if (itemIDs.Count == 0)
         {
-            return known;
+            return true;
         }
 
-        HashSet<int> items = [];
-        try
+        for (int n = 0; n < itemIDs.Count; n++)
         {
-            List<DropRateInfo> rates = [];
-            DropRateInfoChainFeed feed = new(1f);
-            foreach (IItemDropRule rule in Main.ItemDropsDB.GetRulesForNPCID(npcNetID))
+            if (itemIDs[n] == itemID)
             {
-                rule.ReportDroprates(rates, feed);
-            }
-
-            foreach (DropRateInfo rate in rates)
-            {
-                items.Add(rate.itemId);
+                return true;
             }
         }
-        catch (System.Exception)
-        {
-            // A mod's rule that will not report is not worth ending a run over.
-        }
 
-        _cache[npcNetID] = items;
-        return items;
+        return false;
     }
 }

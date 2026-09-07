@@ -2,19 +2,9 @@ using Terraria;
 
 namespace Terragent.World;
 
-/// <summary>The depth bands Terraria divides a world into.</summary>
-internal enum Layer
-{
-    Space,
-    Surface,
-    Underground,
-    Cavern,
-    Underworld,
-}
-
-/// <summary>
-/// Where in the world a given row is, and where a band begins and ends.
-/// </summary>
+/// <summary>Where in the world a given row is, and where a band begins and ends.</summary>
+// The boundaries are per world, not constants: a small world's caverns start higher than a
+// large one's, and the game recomputes them at generation.
 internal static class Layers
 {
     public static Layer At(int y)
@@ -37,7 +27,7 @@ internal static class Layers
         return y > Main.worldSurface * 0.35 ? Layer.Surface : Layer.Space;
     }
 
-    /// <summary>The rows a band covers, as ``(top, bottom)`` inclusive.</summary>
+    /// <summary>The rows a band covers, top and bottom inclusive.</summary>
     public static (int Top, int Bottom) Band(Layer layer) => layer switch
     {
         Layer.Space => (0, (int)(Main.worldSurface * 0.35)),
@@ -47,9 +37,9 @@ internal static class Layers
         _ => (Main.UnderworldLayer + 1, Main.maxTilesY - 1),
     };
 
-    /// <summary>
-    /// A row worth travelling to in order to look for something in this band.
-    /// </summary>
+    /// <summary>A row worth travelling to in order to look for something in this band.</summary>
+    // Just inside the top of it rather than the middle: the point is to be in the band, and
+    // the shallowest part of it is the cheapest to reach.
     public static int EntryRow(Layer layer)
     {
         (int top, int bottom) = Band(layer);
