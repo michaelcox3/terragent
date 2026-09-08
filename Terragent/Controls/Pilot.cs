@@ -329,8 +329,10 @@ internal sealed class Pilot(
         // place a tile inside the character, so it has to rise clear of the cell first.
         // A bridge lays into the floor row beside the body, where the feet already are,
         // and needs no jump: the difference falls out of where the feet are in pixels.
+        // A row above the floor is a pillar; the floor row itself is a bridge, and the
+        // pixel test alone cannot tell them apart when the feet sit exactly on the line.
         float top = put.Y * 16f;
-        if (_body.Frame.Bottom > top)
+        if (put.Y < at.Y && _body.Frame.Bottom > top)
         {
             _body.Align(at);
             _body.Leap(top);

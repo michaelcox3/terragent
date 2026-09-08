@@ -102,7 +102,6 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         // Travel or work, never both. Arrival is the pilot's answer to a question the
         // foreman cannot answer itself, since being near the tile is not the same as being
         // able to reach it.
-
         if (_pilot.Progress is Progress.Arrived)
         {
             job.Work(Target!);
@@ -140,13 +139,28 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         _looked = clock.Now;
         Point from = _body.Footing;
 
-        // One pool out of all of them. Which objective a job came from stops mattering
-        // the moment it is offered: a crystal underfoot beats ore ten tiles away whatever
-        // either of them is for.
+        // One pool out of all of them, one job per kind of work. Which objective a job
+        // came from stops mattering the moment it is offered: a crystal underfoot beats
+        // ore ten tiles away whatever either of them is for.
+        //
+        // One of each, however many objectives asked for it. A bow, a furnace and a
+        // pickaxe all want stone, and three identical gathers cost three sweeps of the
+        // ground to be told the same tile three times.
+        //
+        // By label, which is what the panel already matches on and what a reader would
+        // call two jobs the same. Whichever objective asked first keeps it; they differ
+        // only in how many they wanted, and the one left over is offered again next tick.
         List<IJob> offered = [];
+        HashSet<string> already = [];
         foreach (IObjective objective in _objectives)
         {
-            offered.AddRange(objective.Jobs());
+            foreach (IJob job in objective.Jobs())
+            {
+                if (already.Add(job.Label))
+                {
+                    offered.Add(job);
+                }
+            }
         }
 
         List<(IJob Job, Offer Offer)> candidates = [];

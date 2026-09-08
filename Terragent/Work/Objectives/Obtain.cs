@@ -109,6 +109,14 @@ internal sealed class Obtain(
                 continue;
             }
 
+            // And only when one is actually standing. An anvil the run has not made yet
+            // is not a station left behind, and offering to take it back put two jobs in
+            // the list for the whole run that could never be worked.
+            if (sites.Nearest(body.Footing, [station.Key]) is null)
+            {
+                continue;
+            }
+
             // Both ways, as Trips does for anything else. Breaking a station leaves it on
             // the ground rather than in the bag, so the gather alone finishes with the
             // bench at the body's feet and the job still not done.
@@ -212,9 +220,23 @@ internal sealed class Obtain(
                 continue;
             }
 
-            jobs.Add(bag.Carrying(station.ItemID) > 0
-                ? new Place(terrain, bag, hand, journal, station.ItemID, tileID)
-                : new Craft(terrain, bag, sites, journal, station.ItemID, 0, 1));
+            if (bag.Carrying(station.ItemID) > 0)
+            {
+                jobs.Add(new Place(terrain, bag, hand, journal, station.ItemID, tileID));
+                break;
+            }
+
+            // One standing further off than a craft will walk to. Going back for it beats
+            // making a second: the run has already paid for this one, and five iron bars
+            // is a morning's mining where the walk is a minute.
+            if (sites.Nearest(body.Footing, [tileID]) is not null)
+            {
+                jobs.Add(new Pickup(bag, drops, station.ItemID, 1));
+                jobs.Add(new Gather(terrain, bag, hand, sites, station.ItemID, [tileID], 1));
+                break;
+            }
+
+            jobs.Add(new Craft(terrain, bag, sites, journal, station.ItemID, 0, 1));
             break;
         }
 

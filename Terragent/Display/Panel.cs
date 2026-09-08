@@ -180,7 +180,14 @@ public sealed class Panel : ModSystem, IPanel
         lines.Add(active.Count == 0 ? "Objectives: nothing left it can do" : "Objectives");
         foreach (IObjective live in active)
         {
-            lines.Add($"    {live.Label}");
+            // What is being worked, not what is on the graph. A supply sits in the list
+            // whether or not it is short, because a stocked one offers no jobs and so
+            // costs nothing to leave there; showing it says the run is chasing torches
+            // when it has sixty.
+            if (!live.Met)
+            {
+                lines.Add($"    {live.Label}");
+            }
         }
 
         lines.Add(string.Empty);
