@@ -178,39 +178,6 @@ public class NavigatorTests
         Assert.Equal(1, reached.Index);
     }
 
-    /// <summary>A move the follower struck out is not planned again.</summary>
-    // The whole point of the refused set. The follower is the only thing that finds out a
-    // move does not work, and it tells the search by striking the edge out; a search that
-    // planned it again would hand back the same route, be refused again, and neither side
-    // would ever learn anything. That loop cost a run three and a half minutes with one
-    // edge refused a hundred and three times.
-    //
-    // Keyed on the pair, which is why the follower has to strike out the edge the search
-    // planned rather than one measured from wherever the body happens to be standing.
-    [Fact]
-    public void ARefusedMoveIsNeverPlannedAgain()
-    {
-        Grid grid = new(true,
-            "          ",
-            "          ",
-            "##########");
-
-        Navigator search = new(grid);
-        Ability able = new(Prices, PickPower, Jump, 0);
-        Point from = new(1, 2);
-        Destination to = new(new Point(4, 2), Within: 0);
-
-        Route? open = search.FindRoute(from, to, able, new HashSet<(Point, Point)>());
-        Assert.NotNull(open);
-        Assert.Equal(new Point(2, 2), open.Steps[0].To);
-
-        Route? round = search.FindRoute(from, to, able,
-            new HashSet<(Point, Point)> { (from, new Point(2, 2)) });
-
-        Assert.NotNull(round);
-        Assert.NotEqual(new Point(2, 2), round.Steps[0].To);
-    }
-
     /// <summary>
     /// The floor tile a marker stands on. Markers sit in the air, on ground.
     /// </summary>

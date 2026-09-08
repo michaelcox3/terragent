@@ -33,11 +33,6 @@ internal sealed class Pilot(
 
     private double _since;
 
-    /// <summary>The footing the route in hand was drawn from.</summary>
-    // So a step's own beginning can be worked out. A step names only where it lands, and
-    // the first one of a route begins wherever the search started.
-    private Point _from;
-
     /// <summary>The last footing stood on, which is where a jump in flight began.</summary>
     // A jump has to keep the heading it started with, and by the time it is in the air the
     // body is no longer on the footing the route named.
@@ -98,7 +93,7 @@ internal sealed class Pilot(
             return;
         }
 
-        if (Stalled(route, at))
+        if (Stalled(route.Steps[_step], at))
         {
             return;
         }
@@ -117,7 +112,6 @@ internal sealed class Pilot(
     {
         _destination = site;
         _route = route;
-        _from = _body.Footing;
         _step = 0;
         Progress = Progress.Idle;
     }
@@ -132,7 +126,6 @@ internal sealed class Pilot(
 
     private void Search(Point at, Destination destination)
     {
-        _from = at;
         _step = 0;
         _route = _navigator.FindRoute(at, destination, Ability(), _refusedMoves);
 
@@ -193,9 +186,8 @@ internal sealed class Pilot(
     //
     // Not a retry. The move model said this edge was makeable and the body has just shown
     // otherwise, so the edge is struck out and the route drawn again around it.
-    private bool Stalled(Route route, Point at)
+    private bool Stalled(Step step, Point at)
     {
-        Step step = route.Steps[_step];
         int left = System.Math.Abs(step.To.X - at.X) + System.Math.Abs(step.To.Y - at.Y);
         if (step.To != _pushing || left < _remaining)
         {
@@ -210,18 +202,9 @@ internal sealed class Pilot(
             return false;
         }
 
-        // The edge the search planned, not one measured from where the body ended up. A
-        // fall may go diagonally, so a step from one column lands the body in the other
-        // while it is still in flight; striking out the pair the body happens to be
-        // standing between leaves the real edge untouched, and the next search hands back
-        // the same route. One edge went round a hundred and three times that way, two
-        // seconds of patience each, and a run lost three and a half minutes to it.
-        Point began = _step == 0 ? _from : route.Steps[_step - 1].To;
-
-        _refusedMoves.Add((began, step.To));
-        journal.Note("refused", $"({began.X}, {began.Y}) to ({step.To.X}, {step.To.Y}) by "
-            + $"{step.Kind.ToString().ToLowerInvariant()} does not work; "
-            + $"body at ({at.X}, {at.Y}), going round");
+        _refusedMoves.Add((at, step.To));
+        journal.Note("refused", $"({at.X}, {at.Y}) to ({step.To.X}, {step.To.Y}) by "
+            + $"{step.Kind.ToString().ToLowerInvariant()} does not work; going round");
         Forget();
         return true;
     }
