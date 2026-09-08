@@ -216,25 +216,40 @@ internal sealed class Pilot(
         // search booked rather than any this works out for itself.
         if (Blocking(step) is { } tile)
         {
-            Dig(tile);
+            Dig(tile, at);
             return;
         }
 
         if (step.Kind is StepKind.Place && step.Puts is { } put)
         {
-            Build(put);
+            Build(put, at);
             return;
         }
 
         if (step.Kind is StepKind.Jump)
         {
             _body.Walk(Across(step, at));
-            _body.Jump();
+            _body.Leap(step.To.Y * 16f);
             return;
         }
 
-        // Walking and falling are the same input. In a fall the ground is already gone and
-        // all that is left is to steer toward the column and stop over it.
+        if (step.Kind is StepKind.Fall)
+        {
+            // Down and settled, wherever that turned out to be. A fall that overshoots
+            // leaves every step after it pointing at ground the body is no longer above.
+            if (_body.Grounded && at.Y >= step.To.Y)
+            {
+                Forget();
+                return;
+            }
+
+            // Held over the column rather than pushed toward it. A drop that does not
+            // change the footing gives a sign of zero and presses nothing at all, which
+            // is a body standing on the lip of its own shaft waiting to fall.
+            _body.Align(step.To);
+            return;
+        }
+
         _body.Walk(System.Math.Sign(step.To.X - at.X));
     }
 
@@ -274,32 +289,62 @@ internal sealed class Pilot(
         return null;
     }
 
-    private void Dig(Point tile)
+    private void Dig(Point tile, Point at)
     {
         _bag.Hold(_bag.Pickaxe);
-        if (_hand.InReach(tile.X, tile.Y))
+        if (!_hand.InReach(tile.X, tile.Y))
         {
-            _hand.Aim(tile.X, tile.Y);
-            _hand.Use();
+            // Out of reach means the body has drifted off the plan. Draw it again from
+            // here rather than swinging at nothing.
+            Forget();
             return;
         }
 
-        // Out of reach means the body has drifted off the plan. Draw it again from here
-        // rather than swinging at nothing.
-        Forget();
+        // Held in the column pair the plan is cutting. Standing off to one side of a
+        // shaft as it opens rests the body on the lip instead of dropping it through.
+        _body.Align(at);
+        _hand.Aim(tile.X, tile.Y);
+        _hand.Use();
     }
 
-    private void Build(Point put)
+    private void Build(Point put, Point at)
     {
-        _bag.Hold(_bag.Block);
-        if (_hand.InPlaceReach(put.X, put.Y))
+        // Finished by the tile existing rather than by a swing being thrown. Terraria
+        // refuses a placement in silence, and the follower cannot tell that from a swing
+        // still in flight.
+        if (_terrain.KindAt(put.X, put.Y) is TileKind.Solid)
         {
-            _hand.Aim(put.X, put.Y);
-            _hand.Use();
             return;
         }
 
-        Forget();
+        if (_bag.Block == 0)
+        {
+            Forget();
+            return;
+        }
+
+        _bag.Hold(_bag.Block);
+
+        // A pillar puts its block in a cell the body is filling, and the game will not
+        // place a tile inside the character, so it has to rise clear of the cell first.
+        // A bridge lays into the floor row beside the body, where the feet already are,
+        // and needs no jump: the difference falls out of where the feet are in pixels.
+        float top = put.Y * 16f;
+        if (_body.Frame.Bottom > top)
+        {
+            _body.Align(at);
+            _body.Leap(top);
+            return;
+        }
+
+        if (!_hand.InPlaceReach(put.X, put.Y))
+        {
+            Forget();
+            return;
+        }
+
+        _hand.Aim(put.X, put.Y);
+        _hand.Use();
     }
 
     private void Forget()

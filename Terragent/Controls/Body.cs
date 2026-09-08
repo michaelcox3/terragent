@@ -106,6 +106,74 @@ internal sealed class Body(Player player) : IBody
         _player.controlLeft = direction < 0;
     }
 
+    public Rectangle Frame =>
+        new((int)_player.position.X, (int)_player.position.Y, _player.width, _player.height);
+
+    /// <summary>How far the body keeps rising after the jump key is let go, in pixels.</summary>
+    private float CoastPixels => JumpSpeed * JumpSpeed / (2f * System.Math.Max(0.01f, Gravity));
+
+    public void Align(Point footing)
+    {
+        // Pixels either side of the seam that count as arrived, and the speed below
+        // which the body counts as stopped.
+        const float Slack = 2f;
+        const float Still = 0.05f;
+
+        float error = World.Hitbox.SeamX(footing) - _player.Center.X;
+        float speed = _player.velocity.X;
+
+        // How far it drifts with nothing pressed. runSlowdown is the bite friction takes
+        // out of horizontal speed each tick.
+        float drag = System.Math.Max(0.05f, _player.runSlowdown);
+        float coast = speed * speed / (2f * drag);
+
+        if (System.Math.Abs(error) <= Slack)
+        {
+            // Arriving is not the same as stopping, and momentum is what carries a body
+            // over a two wide hole it was meant to drop into.
+            if (speed > Still)
+            {
+                _player.controlLeft = true;
+            }
+            else if (speed < -Still)
+            {
+                _player.controlRight = true;
+            }
+
+            return;
+        }
+
+        // Already carrying enough to arrive. Pressing harder only overshoots, which is
+        // how the deadband gets entered at a run in the first place.
+        if (speed * error > 0f && coast >= System.Math.Abs(error))
+        {
+            return;
+        }
+
+        _player.controlRight = error > 0f;
+        _player.controlLeft = error < 0f;
+    }
+
+    public void Leap(float topPixels)
+    {
+        bool grounded = _player.velocity.Y == 0f || _player.wet;
+        if (grounded && _jumped)
+        {
+            _jumped = false;
+            _player.controlLeft = false;
+            _player.controlRight = false;
+            return;
+        }
+
+        if (!grounded && _player.Bottom.Y - topPixels <= CoastPixels * 0.5f)
+        {
+            return;
+        }
+
+        _player.controlJump = true;
+        _jumped = grounded || _jumped;
+    }
+
     public void Jump()
     {
         // Terraria will not start a jump while the key is already held: Player.releaseJump

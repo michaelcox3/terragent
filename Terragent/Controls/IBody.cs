@@ -56,11 +56,33 @@ internal interface IBody
     // once per tick: nothing in it changes until the boots do.
     Leap Arc();
 
+    /// <summary>The pixels the body actually fills, which a tile pair only approximates.</summary>
+    // Within a footing the body slides, and whether it has risen clear of the cell a block
+    // is going into is a question about pixels. Asking the tile pair says yes while the
+    // feet are still in the way and the game refuses the placement without a word.
+    Rectangle Frame { get; }
+
     /// <summary>Hold left, right, or neither. Minus one, one, or zero.</summary>
     void Walk(int direction);
 
+    /// <summary>Hold the body over the columns the plan put it in.</summary>
+    // Not the sign of a tile difference. A body straddles two columns, so a step that
+    // does not change the footing gives a sign of zero and presses nothing at all: that
+    // is a character standing on the lip of the shaft it just dug, waiting to fall.
+    //
+    // It counter-presses inside the deadband, because arriving is not stopping, and it
+    // stays off the key when the speed already carried will coast the rest of the way.
+    void Align(Point footing);
+
     /// <summary>Hold jump for this tick.</summary>
     void Jump();
+
+    /// <summary>Jump, letting go once what is left of the rise will coast to this row.</summary>
+    // Terraria keeps climbing about two tiles after the key is released, so holding all
+    // the way to the target row overshoots by that much and makes a one tile hop take the
+    // same input as a full leap.
+    /// <param name="topPixels">The row to arrive at, in pixels.</param>
+    void Leap(float topPixels);
 
     /// <summary>Hold down, which is how a body drops through a platform.</summary>
     void Down();
