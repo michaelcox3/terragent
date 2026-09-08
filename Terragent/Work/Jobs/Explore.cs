@@ -63,6 +63,19 @@ internal sealed class Explore(
 
     public Offer? Nearest(Point from)
     {
+        // The band first, when what is wanted has one and the body is not in it. A
+        // frontier is ground with something unseen to one side, so the edge of a revealed
+        // strip runs sideways and walking it turns up more of the same row. Everything
+        // below is unknown and unknown below is never a frontier, which is how a run after
+        // iron paces the surface until the sun goes down.
+        if (TileZones.Nearest(tiles, from.Y) is { } band && Layers.At(from.Y) != band)
+        {
+            // The body's own column, so the way down is a shaft rather than a journey.
+            // The search prices its own digging and will cut one.
+            Point down = new(from.X, Layers.EntryRow(band));
+            return new Offer(new TileTarget(down), new Destination(down, Roughly));
+        }
+
         for (int ring = Far; ring > 0; ring--)
         {
             foreach (int way in Sideways)

@@ -29,6 +29,7 @@ public sealed class TerragentMod : Mod
         // Read once, here, so a typo in the file throws with the name in it at load rather
         // than becoming a zero somebody chases through a run.
         Mining.Load(this);
+        TileZones.Load(this);
     }
 
     public override void Unload()

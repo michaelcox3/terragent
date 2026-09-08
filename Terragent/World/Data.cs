@@ -118,4 +118,9 @@ internal static class Data
         && Enum.TryParse(value.GetString(), out TEnum parsed)
             ? parsed
             : fallback;
+
+    /// <summary>One of an enum's names, for a field that holds a list of them.</summary>
+    public static TEnum Choice<TEnum>(string name, TEnum fallback)
+        where TEnum : struct =>
+        Enum.TryParse(name, out TEnum parsed) ? parsed : fallback;
 }

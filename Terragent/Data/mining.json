@@ -72,5 +72,101 @@
       "pick": 55,
       "belowSurfaceOnly": true
     }
+  ],
+  "zones": [
+    {
+      "tile": "Copper",
+      "layers": [
+        "Surface",
+        "Underground",
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Tin",
+      "layers": [
+        "Surface",
+        "Underground",
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Iron",
+      "layers": [
+        "Underground",
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Lead",
+      "layers": [
+        "Underground",
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Silver",
+      "layers": [
+        "Underground",
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Tungsten",
+      "layers": [
+        "Underground",
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Gold",
+      "layers": [
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Platinum",
+      "layers": [
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Demonite",
+      "layers": [
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Crimtane",
+      "layers": [
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Meteorite",
+      "layers": [
+        "Surface",
+        "Underground"
+      ]
+    },
+    {
+      "tile": "Hellstone",
+      "layers": [
+        "Underworld"
+      ]
+    },
+    {
+      "tile": "Heart",
+      "layers": [
+        "Cavern"
+      ]
+    },
+    {
+      "tile": "Stone",
+      "layers": [
+        "Underground",
+        "Cavern"
+      ]
+    }
   ]
 }
