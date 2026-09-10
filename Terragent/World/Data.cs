@@ -64,6 +64,39 @@ internal static class Data
         return [.. items];
     }
 
+    /// <summary>Everything an objective wants, each filled by any of several items.</summary>
+    // Two levels, because both questions have to be asked. All of the outer must be had;
+    // any one of an inner will do. Gold armour is a helmet and a chainmail and a greaves,
+    // and each of those is the gold one or the platinum one, which one level cannot say.
+    //
+    // The count sits on the inner, since a hundred wood and one helmet are both wants and
+    // an objective can hold both.
+    public static IReadOnlyList<NeededItem> Wanted(JsonElement parent, string field)
+    {
+        List<NeededItem> all = [];
+        if (!parent.TryGetProperty(field, out JsonElement groups))
+        {
+            return all;
+        }
+
+        foreach (JsonElement group in groups.EnumerateArray())
+        {
+            int count = Number(group, "count", 1);
+            List<(int ItemID, int Count)> options = [];
+            foreach (int itemID in Items(group, "any"))
+            {
+                options.Add((itemID, count));
+            }
+
+            if (options.Count > 0)
+            {
+                all.Add(new NeededItem(options));
+            }
+        }
+
+        return all;
+    }
+
     /// <summary>NPC ids from their <see cref="NPCID"/> names.</summary>
     public static int[] Creatures(JsonElement parent, string field)
     {

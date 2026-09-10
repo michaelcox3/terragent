@@ -44,6 +44,14 @@ internal sealed class Fight(
     // state, so what it is currently swinging at is the foreman's to know.
     public string Label => $"Fight {Names.Any(types)}";
 
+    /// <summary>Two fights over the same kinds of creature are one piece of work.</summary>
+    // By the label, which is made of the same thing the work is: the item, or the kinds.
+    public bool Equals(IJob? other) => other is Fight same && same.Label == Label;
+
+    public override bool Equals(object? other) => Equals(other as IJob);
+
+    public override int GetHashCode() => System.HashCode.Combine(nameof(Fight), Label);
+
     /// <summary>Never finished, because there is always something else to kill.</summary>
     // Whether the one it chose is dead is Workable's question, and the objective decides
     // when enough have died by watching what they drop.

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
 using Terragent.Work.Jobs;
+using Terragent.World;
 
 namespace Terragent.Work.Objectives;
 
@@ -33,7 +34,7 @@ internal interface IObjective
     // What the jobs are made from, shown so the panel can say the run is short sixty three
     // wood rather than only that it is chopping. Empty for an objective that is not about
     // having things.
-    IReadOnlyDictionary<int, int> Missing();
+    IReadOnlyList<NeededItem> NeededItems();
 
     /// <summary>Every job that would advance it from where things stand.</summary>
     // Only jobs that can be done now: the anvil is not listed while the bars are still in

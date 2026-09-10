@@ -8,9 +8,15 @@ using Terragent.Work.Jobs.Targets;
 
 namespace Terragent.Work.Jobs;
 
-/// <summary>Standing at a station and making something.</summary>
-// The station is the site. Most recipes want one, and the ones that do not are made where
-// the body already stands, which is a site of zero tiles away rather than a special case.
+/// <summary>Making something, station and all.</summary>
+// Stand a bench up, make the thing at it, take the bench back. One job, because all three
+// happen in the same place and because the moment worth taking a station back is the tick
+// after the craft, which nothing else is standing there to notice.
+//
+// Split across three jobs it never worked. Whatever offered the taking back had to guess
+// whether the run still wanted the bench, and that guess flips as materials come and go:
+// the bench went down, the tree reported one missing again, and the run walked back and
+// mined the bench it had laid a second earlier.
 //
 // It asks the game whether it can craft rather than working it out from the recipe. The
 // game is what spends the materials, so anything else is a second opinion that can differ
@@ -18,90 +24,150 @@ namespace Terragent.Work.Jobs;
 internal sealed class Craft(
     ITerrain terrain,
     IInventory bag,
+    IHand hand,
+    IBody body,
     ISites sites,
     IJournal journal,
     int itemID,
     int tileID,
+    int stationID,
     int count) : IJob
 {
     private readonly ITerrain _terrain = terrain;
     private readonly IInventory _bag = bag;
+    private readonly IHand _hand = hand;
+    private readonly IBody _body = body;
     private readonly ISites _sites = sites;
 
     /// <summary>Columns a route may stop short of a station and still count as at it.</summary>
     // Terraria's own reach is wider than it is tall, so the columns and the rows are
     // separate numbers. One number for both stops the body two rows above a bench the game
     // will not let it use, and it then stands there pressing nothing.
-    //
-    // Both are inside what the game actually allows, so arriving means the game agrees.
-    // Being conservative costs a step or two of walking; being generous costs the job.
     private const int Across = 2;
 
     /// <summary>Rows a route may stop above or below a station.</summary>
     private const int Below = 1;
 
     /// <summary>How far a standing station is worth walking to rather than standing up another.</summary>
-    // The one number that keeps this job and the placing of a station from both being
-    // right at once. Inside it, walking to the bench that exists is the answer and putting
-    // a second one down is litter; outside it, a fresh bench is ten wood against a long
-    // walk and the fresh bench wins.
-    //
-    // One number for every station, which understates an anvil: five iron bars is worth
-    // walking a good deal further for than ten wood. Split it when that starts to show.
+    // Inside it, walking to the bench that exists is the answer and putting a second one
+    // down is litter; outside it, a fresh bench is ten wood against a long walk.
     public const int Reuse = 60;
 
     public string Label => $"Craft {Names.Item(itemID)}";
 
-    public bool Done => _bag.Carrying(itemID) >= count;
+    /// <summary>Two crafts of the same thing are one piece of work, however many either wanted.</summary>
+    // By the label, which is made of the same thing the work is: the item, or the kinds.
+    public bool Equals(IJob? other) => other is Craft same && same.Label == Label;
 
-    /// <summary>Still worth going while the station is in reach or still standing.</summary>
-    // Not "in reach" alone. A craft that means to walk to a bench across the clearing is
-    // not at one yet, and answering no there ends the job on the tick it was chosen: the
-    // bench already down thirty tiles away was invisible, and the run put another one
-    // beside itself or stalled when there was nowhere to.
+    public override bool Equals(object? other) => Equals(other as IJob);
+
+    public override int GetHashCode() => System.HashCode.Combine(nameof(Craft), Label);
+
+    /// <summary>Made, and nothing of ours left standing.</summary>
+    // Both, because leaving the bench behind is what made the next craft walk back across
+    // the clearing for it, or stand up a second one and carry the spare for ever.
+    public bool Done => _bag.Carrying(itemID) >= count && Cleared;
+
+    /// <summary>Whether there is no station of ours still up.</summary>
+    // In reach and none in the bag is one we put down and have not taken back. One in the
+    // bag means it is already ours, whoever laid it.
+    private bool Cleared =>
+        tileID <= 0 || stationID <= 0 || _bag.Carrying(stationID) > 0
+        || !_bag.NearStation(tileID);
+
+    /// <summary>Still worth being here while there is any of it left to do.</summary>
+    // The last swing of the job breaks the station, so a test that wanted one standing
+    // would end the job one tick before it finished. What ends it is a station that has
+    // gone and has not arrived in the bag, which is a bench broken and its drop lost.
     public bool Workable(ITarget target) =>
         tileID <= 0
         || _bag.NearStation(tileID)
-        || (target.Tile is { } tile && _terrain.TypeAt(tile.X, tile.Y) == tileID);
+        || _bag.Carrying(stationID) > 0
+        || Standing(target)
+        || Spot(target) is not null;
+
+    /// <summary>Whether the station is up on the spot this job was sent to.</summary>
+    // The target names the floor, so the station sits in the cell above it. Asking about
+    // the floor itself said no the instant the bench went down, and the job was let go one
+    // tick after placing, every time.
+    private bool Standing(ITarget target) =>
+        target.Tile is { } floor
+        && (_terrain.TypeAt(floor.X, floor.Y) == tileID
+            || _terrain.TypeAt(floor.X, floor.Y - 1) == tileID);
 
     public Offer? Nearest(Point from)
     {
+        // Nothing to stand at, so here will do. Zero tiles away, and the pilot reports
+        // arrival on the first tick.
         if (tileID <= 0)
         {
-            // Nothing to stand at, so here will do. Zero tiles away, and the pilot reports
-            // arrival on the first tick.
             return new Offer(TileTarget.Nowhere, new Destination(from, 0));
         }
 
-        // Already in reach, which is the common case once a bench is down beside the run.
+        // Already in reach, which is every tick after the bench goes down. Placing,
+        // crafting and taking it back all happen without moving, which is what lets one
+        // job hold all three.
         if (_bag.NearStation(tileID))
         {
             return new Offer(new TileTarget(from), new Destination(from, 0));
         }
 
-        // Bounded, so that this and the standing up of a station are never both right.
-        // Unbounded it also pays for the whole box every time it misses, which on a fresh
-        // world is every plan.
-        if (_sites.Nearest(from, [tileID], Reuse) is not { } tile)
+        // One in the bag, so the answer is to put it down beside the body rather than to
+        // go anywhere. The spot may need digging out or flooring first; arriving at
+        // digging reach covers both, since it is the tighter of the two boxes.
+        if (_bag.Carrying(stationID) > 0
+            && Placement.Find(_terrain, tileID, from, _bag.PickPower, _bag.Blocks) is
+                { } spot)
         {
-            return null;
+            Point floor = new(spot.At.X, spot.At.Y + 1);
+            return new Offer(
+                new TileTarget(floor),
+                new Destination(floor)
+                {
+                    Arrived = footing => _hand.CanUseFrom(footing, spot.At.X, spot.At.Y),
+                });
         }
 
-        return new Offer(
-            new TileTarget(tile),
-            new Destination(tile)
-            {
-                Arrived = footing => Navigator.Reached(footing, tile, Across, Below),
-            });
+        // One standing near enough to walk to. Bounded, so that this and the standing up
+        // of a fresh one are never both right, and because a miss otherwise pays for the
+        // whole box every plan.
+        if (_sites.Nearest(from, [tileID], Reuse) is { } tile)
+        {
+            return new Offer(
+                new TileTarget(tile),
+                new Destination(tile)
+                {
+                    Arrived = footing => Navigator.Reached(footing, tile, Across, Below),
+                });
+        }
+
+        return null;
     }
 
     public void Work(ITarget target)
     {
         // Asked every tick rather than remembered. A craft spends materials, so the second
         // one of a batch is a different question from the first.
-        if (_bag.CanCraft(itemID))
+        //
+        // Only while short of the count. The game will happily go on making torches until
+        // the wood runs out, and what is wanted is three.
+        if (_bag.Carrying(itemID) < count && _bag.CanCraft(itemID))
         {
             _bag.Craft(itemID);
+            return;
+        }
+
+        if (tileID > 0 && !_bag.NearStation(tileID))
+        {
+            Stand(target);
+            return;
+        }
+
+        // Made, and the bench still up. Taking it back is the last thing the job does, and
+        // this tick is the only one that knows the run is finished with it.
+        if (_bag.Carrying(itemID) >= count && !Cleared)
+        {
+            Take();
             return;
         }
 
@@ -112,4 +178,72 @@ internal sealed class Craft(
             + $"carrying {_bag.Carrying(itemID)} of {count}");
     }
 
+    /// <summary>Put the station down, breaking and flooring whatever is in the way first.</summary>
+    // One cell a tick, read off the ground every tick rather than remembered. A list
+    // worked down from memory swings at cells the last swing already opened.
+    private void Stand(ITarget target)
+    {
+        if (Spot(target) is not { } spot)
+        {
+            return;
+        }
+
+        if (spot.Clear.Count > 0)
+        {
+            Swing(_bag.Pickaxe, spot.Clear[0]);
+            return;
+        }
+
+        if (spot.Fill.Count > 0)
+        {
+            Swing(_bag.Block, spot.Fill[0]);
+            return;
+        }
+
+        // A station fills a cell the body may be standing in, and Terraria will not put a
+        // tile inside the character, so it has to rise clear of the cell before the swing.
+        Rectangle cell = new(spot.At.X * 16, spot.At.Y * 16, 16, 16);
+        if (_body.Frame.Intersects(cell))
+        {
+            _body.Leap(spot.At.Y * 16f);
+            return;
+        }
+
+        Swing(stationID, spot.At);
+
+        journal.Change("placing", $"{Names.Item(stationID)} at ({spot.At.X}, {spot.At.Y}): "
+            + $"holding {Names.Item(_hand.Held)}, "
+            + $"in reach {_hand.InPlaceReach(spot.At.X, spot.At.Y)}, "
+            + $"hand blocked {_hand.Blocked}, "
+            + $"tile there {_terrain.KindAt(spot.At.X, spot.At.Y)}, "
+            + $"at station {_bag.NearStation(tileID)}");
+    }
+
+    /// <summary>Break the station, which leaves it on the ground at the body's feet.</summary>
+    private void Take()
+    {
+        if (_sites.Nearest(_body.Footing, [tileID], Across + Below) is not { } tile)
+        {
+            return;
+        }
+
+        Swing(_bag.Pickaxe, tile);
+    }
+
+    /// <summary>Hold a thing and press use on a cell, which is every swing this job makes.</summary>
+    // Held every tick, not once. A torch raised for light in between leaves the wrong
+    // thing in hand, and the swing then goes out with a pickaxe where a bench was meant.
+    private void Swing(int held, Point cell)
+    {
+        _bag.Hold(held);
+        _hand.Aim(cell.X, cell.Y);
+        _hand.Use();
+    }
+
+    /// <summary>What standing the station on this target would still take.</summary>
+    private Spot? Spot(ITarget target) =>
+        target.Tile is { } floor
+            ? Placement.Needs(_terrain, tileID, new Point(floor.X, floor.Y - 1),
+                _bag.PickPower)
+            : null;
 }

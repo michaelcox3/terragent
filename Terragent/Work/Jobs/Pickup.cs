@@ -25,6 +25,14 @@ internal sealed class Pickup(
 
     public string Label => $"Pick up {Names.Item(itemID)}";
 
+    /// <summary>Two pickups of the same thing are one piece of work.</summary>
+    // By the label, which is made of the same thing the work is: the item, or the kinds.
+    public bool Equals(IJob? other) => other is Pickup same && same.Label == Label;
+
+    public override bool Equals(object? other) => Equals(other as IJob);
+
+    public override int GetHashCode() => System.HashCode.Combine(nameof(Pickup), Label);
+
     public bool Done => _bag.Carrying(itemID) >= count;
 
     /// <summary>Worth being here while the thing it came for is still lying there.</summary>

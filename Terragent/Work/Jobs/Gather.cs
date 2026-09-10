@@ -30,6 +30,14 @@ internal sealed class Gather(
 
     public string Label => $"Gather {Names.Item(itemID)}";
 
+    /// <summary>Two gathers of the same thing are one piece of work, whichever objective asked.</summary>
+    // By the label, which is made of the same thing the work is: the item, or the kinds.
+    public bool Equals(IJob? other) => other is Gather same && same.Label == Label;
+
+    public override bool Equals(object? other) => Equals(other as IJob);
+
+    public override int GetHashCode() => System.HashCode.Combine(nameof(Gather), Label);
+
     public bool Done => _bag.Carrying(itemID) >= count;
 
     public bool Workable(ITarget target) =>

@@ -22,11 +22,6 @@ internal sealed class Progression(IReadOnlyList<DagNode> nodes) : IProgression
     /// <summary>Keys reached, which is the only thing here that outlives a tick.</summary>
     private readonly HashSet<string> _reached = [];
 
-    /// <summary>How many keys were reached when the live list was last worked out.</summary>
-    // A version rather than a comparison of the sets, which is sound because reached only
-    // ever grows. Restore adds to it and Record adds to it, and nothing takes anything out.
-    private int _known = -1;
-
     /// <summary>The live objectives, kept rather than rebuilt every tick.</summary>
     // Not memory of anything. This is a function of the nodes and what has been reached,
     // memoised: the foreman drops the job it is holding whenever it is handed a different
@@ -53,23 +48,23 @@ internal sealed class Progression(IReadOnlyList<DagNode> nodes) : IProgression
     // file position is what made a run blind to every crystal, pot and vein belonging to a
     // node further down.
     //
-    // Supplies sit in here like anything else rather than cutting in front. One that is
-    // stocked offers no jobs at all, so its being listed costs nothing, and one that is
-    // short puts its jobs in the same pool as the rest and wins them on distance. Cutting
-    // in was from when a single objective was handed down and a restock could be queued
-    // behind the thing that spends it; with the whole front live there is no queue to be
-    // stuck at the back of.
+    // Supplies sit in here like anything else rather than cutting in front. A short one
+    // puts its jobs in the same pool as the rest and wins them on distance. Cutting in was
+    // from when a single objective was handed down and a restock could be queued behind
+    // the thing that spends it; with everything live there is no queue to be stuck at the
+    // back of.
+    //
+    // Only what is actually being worked. A stocked supply and a met objective offer no
+    // jobs, and listing them says the run is chasing torches when it has sixty.
     private void Refresh()
     {
-        if (_known == _reached.Count)
-        {
-            return;
-        }
-
         List<IObjective> working = [];
         foreach (DagNode node in _nodes)
         {
-            if (node.Objective is not Supply && !_reached.Contains(node.Objective.Key) && Ready(node))
+            if (node.Objective is not Supply
+                && !_reached.Contains(node.Objective.Key)
+                && Ready(node)
+                && !node.Objective.Met)
             {
                 working.Add(node.Objective);
             }
@@ -84,7 +79,7 @@ internal sealed class Progression(IReadOnlyList<DagNode> nodes) : IProgression
         Dictionary<int, Supply> keeping = [];
         foreach (DagNode node in _nodes)
         {
-            if (node.Objective is Supply keep && Ready(node))
+            if (node.Objective is Supply keep && Ready(node) && !keep.Met)
             {
                 keeping[keep.ItemID] = keep;
             }
@@ -92,8 +87,34 @@ internal sealed class Progression(IReadOnlyList<DagNode> nodes) : IProgression
 
         working.AddRange(keeping.Values);
 
-        _known = _reached.Count;
-        _working = working;
+        // The list it already had, while it holds the same objectives. The foreman drops
+        // the job in hand whenever it is handed a different list, and a fresh one every
+        // tick would reset it sixty times a second. A supply goes short and stocked again
+        // without anything being reached, so a count of what is behind the run cannot say
+        // whether this has changed.
+        if (!Same(working))
+        {
+            _working = working;
+        }
+    }
+
+    /// <summary>Whether this is the same run of objectives as the one already held.</summary>
+    private bool Same(List<IObjective> working)
+    {
+        if (working.Count != _working.Count)
+        {
+            return false;
+        }
+
+        for (int n = 0; n < working.Count; n++)
+        {
+            if (!ReferenceEquals(working[n], _working[n]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void Record()
@@ -242,8 +263,7 @@ internal sealed class Progression(IReadOnlyList<DagNode> nodes) : IProgression
         return Data.Text(entry, "kind") switch
         {
             "Obtain" => Getting(key, label, recipes, terrain, bag, hand, body, sites, drops,
-                creatures, clock, journal, Data.Items(entry, "items"),
-                Data.Number(entry, "count", 1)),
+                creatures, clock, journal, Data.Wanted(entry, "all")),
             "Defeat" => new Defeat(key, label, creatures, bag, hand, journal,
                 Data.Creatures(entry, "creatures"), Downed(Data.Text(entry, "downed"))),
             "Supply" => Keeping(entry, key, label, recipes, terrain, bag, hand, body, sites,
@@ -260,21 +280,23 @@ internal sealed class Progression(IReadOnlyList<DagNode> nodes) : IProgression
     private static Obtain Getting(string key, string label, IRecipeTree recipes,
         ITerrain terrain,
         IInventory bag, IHand hand, IBody body, ISites sites, IDrops drops,
-        ICreatures creatures, IClock clock, IJournal journal, IReadOnlyList<int> items,
-        int count)
+        ICreatures creatures, IClock clock, IJournal journal, IReadOnlyList<NeededItem> all)
     {
-        Dictionary<int, int> stations = [];
-        foreach (int item in items)
+        Dictionary<int, IReadOnlyList<int>> stations = [];
+        foreach (NeededItem want in all)
         {
-            foreach (KeyValuePair<int, int> station in
-                RecipeTree.Stations(recipes.Of(item, Obtain.Deep)))
+            foreach ((int itemID, int _) in want.Options)
             {
-                stations[station.Key] = station.Value;
+                foreach (KeyValuePair<int, IReadOnlyList<int>> station in
+                    RecipeTree.Stations(recipes.Of(itemID, Obtain.Deep)))
+                {
+                    stations[station.Key] = station.Value;
+                }
             }
         }
 
         return new Obtain(key, label, recipes, terrain, bag, hand, body, sites, drops,
-            creatures, clock, journal, items, stations, count);
+            creatures, clock, journal, all, stations);
     }
 
     /// <summary>A supply, and the getting of the item that fills it.</summary>
@@ -286,9 +308,12 @@ internal sealed class Progression(IReadOnlyList<DagNode> nodes) : IProgression
         int item = Data.Item(Data.Text(entry, "item"));
         int ceiling = Data.Number(entry, "ceiling", 1);
 
+        // One want of one item, since a supply keeps a single thing in stock. The shape is
+        // the same as an objective's so that filling one is ordinary work and not a second
+        // kind of it.
         return new Supply(key, label, bag,
             Getting(key, label, recipes, terrain, bag, hand, body, sites, drops, creatures,
-                clock, journal, [item], ceiling),
+                clock, journal, [new NeededItem([(item, ceiling)])]),
             item, Data.Number(entry, "restockAt", 0), ceiling,
             Data.Number(entry, "reserve", 0));
     }

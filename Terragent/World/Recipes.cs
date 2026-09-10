@@ -19,7 +19,7 @@ namespace Terragent.World;
 // tell it was missing a bench and not what to make.
 internal static class Recipes
 {
-    private static Dictionary<int, int>? _placers;
+    private static Dictionary<int, List<int>>? _placers;
 
     /// <summary>Every recipe in the game, in the shape the walk reads.</summary>
     public static IReadOnlyList<CraftingRecipe> Book()
@@ -52,14 +52,32 @@ internal static class Recipes
     public static bool Gathered(int itemID) =>
         Mining.Yields(itemID).Count > 0 || Loot.Dropped(itemID);
 
-    private static IReadOnlyList<(int ItemID, int TileID)> Stations(Recipe recipe)
+    /// <summary>What a recipe has to be worked at, and everything that stands one up.</summary>
+    // Every item, not the first. One tile is anvils and two items place it, an iron one and
+    // a lead one; one tile is work benches and a dozen woods place that. Keeping only the
+    // first left a lead world owing five iron bars for an anvil it could have made out of
+    // the lead it had, with no way to get them.
+    private static IReadOnlyList<(int ItemID, IReadOnlyList<int> Instead, int TileID)>
+        Stations(Recipe recipe)
     {
-        List<(int ItemID, int TileID)> stations = [];
+        List<(int ItemID, IReadOnlyList<int> Instead, int TileID)> stations = [];
         foreach (int tileID in recipe.requiredTile)
         {
-            if (tileID > 0 && Places(tileID) is > 0 and int item)
+            if (tileID <= 0)
             {
-                stations.Add((item, tileID));
+                continue;
+            }
+
+            IReadOnlyList<int> placers = Places(tileID);
+            if (placers.Count > 0)
+            {
+                List<int> spares = [];
+                for (int n = 1; n < placers.Count; n++)
+                {
+                    spares.Add(placers[n]);
+                }
+
+                stations.Add((placers[0], spares, tileID));
             }
         }
 
@@ -112,7 +130,7 @@ internal static class Recipes
     /// <summary>The item that puts this tile down, or zero when nothing does.</summary>
     // Built once by walking every item and asking what it places, because the game keeps
     // the mapping only in that direction.
-    private static int Places(int tileID)
+    private static IReadOnlyList<int> Places(int tileID)
     {
         if (_placers is null)
         {
@@ -120,14 +138,22 @@ internal static class Recipes
             for (int item = 0; item < ItemID.Count; item++)
             {
                 int tile = ContentSamples.ItemsByType[item].createTile;
-                if (tile > 0 && !_placers.ContainsKey(tile))
+                if (tile <= 0)
                 {
-                    _placers[tile] = item;
+                    continue;
                 }
+
+                if (!_placers.TryGetValue(tile, out List<int>? placers))
+                {
+                    placers = [];
+                    _placers[tile] = placers;
+                }
+
+                placers.Add(item);
             }
         }
 
-        return _placers.TryGetValue(tileID, out int placer) ? placer : 0;
+        return _placers.TryGetValue(tileID, out List<int>? found) ? found : [];
     }
 
 }

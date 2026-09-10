@@ -13,7 +13,12 @@ namespace Terragent.Work.Jobs;
 // A kind of work rather than one spot of it. Chopping wood is one job with a hundred
 // trees in sight, not a hundred jobs, and building one object per visible tile every
 // tick is how a frame gets dropped.
-internal interface IJob
+//
+// Equatable, because several objectives are live at once and they overlap: a bow, a furnace
+// and a pickaxe all want stone, and each asks for it separately. Three identical gathers
+// cost three sweeps of the ground to be told the same tile three times, so the pool keeps
+// one of each and every job says for itself what makes another one the same.
+internal interface IJob : System.IEquatable<IJob>
 {
     /// <summary>What to call it on the panel.</summary>
     string Label { get; }

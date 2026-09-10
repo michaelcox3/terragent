@@ -37,7 +37,7 @@ internal sealed class Defeat(
     // No summoning yet. The eye comes at night on its own often enough to be worth waiting
     // for, and a run that could craft its own summon would still need the fight first.
     // Nothing to gather. It wants something dead, not something had.
-    public IReadOnlyDictionary<int, int> Missing() => new Dictionary<int, int>();
+    public IReadOnlyList<NeededItem> NeededItems() => [];
 
     public IReadOnlyList<IJob> Jobs() => [new Fight(_creatures, bag, hand, journal, types)];
 }

@@ -5,10 +5,14 @@
       "kind": "Obtain",
       "label": "Gather Wood",
       "requires": [],
-      "items": [
-        "Wood"
-      ],
-      "count": 100
+      "all": [
+        {
+          "any": [
+            "Wood"
+          ],
+          "count": 100
+        }
+      ]
     },
     {
       "key": "torch",
@@ -17,10 +21,13 @@
       "requires": [
         "wood"
       ],
-      "items": [
-        "Torch"
-      ],
-      "count": 1
+      "all": [
+        {
+          "any": [
+            "Torch"
+          ]
+        }
+      ]
     },
     {
       "key": "torch_supply_1",
@@ -41,8 +48,12 @@
       "requires": [
         "torch"
       ],
-      "items": [
-        "WoodenBow"
+      "all": [
+        {
+          "any": [
+            "WoodenBow"
+          ]
+        }
       ]
     },
     {
@@ -76,10 +87,14 @@
       "requires": [
         "torch"
       ],
-      "items": [
-        "LifeCrystal"
-      ],
-      "count": 15
+      "all": [
+        {
+          "any": [
+            "LifeCrystal"
+          ],
+          "count": 15
+        }
+      ]
     },
     {
       "key": "iron_or_lead_pickaxe",
@@ -88,9 +103,13 @@
       "requires": [
         "torch"
       ],
-      "items": [
-        "IronPickaxe",
-        "LeadPickaxe"
+      "all": [
+        {
+          "any": [
+            "IronPickaxe",
+            "LeadPickaxe"
+          ]
+        }
       ]
     },
     {
@@ -100,9 +119,13 @@
       "requires": [
         "iron_or_lead_pickaxe"
       ],
-      "items": [
-        "SilverPickaxe",
-        "TungstenPickaxe"
+      "all": [
+        {
+          "any": [
+            "SilverPickaxe",
+            "TungstenPickaxe"
+          ]
+        }
       ]
     },
     {
@@ -124,9 +147,13 @@
       "requires": [
         "silver_or_tungsten_pickaxe"
       ],
-      "items": [
-        "GoldPickaxe",
-        "PlatinumPickaxe"
+      "all": [
+        {
+          "any": [
+            "GoldPickaxe",
+            "PlatinumPickaxe"
+          ]
+        }
       ]
     },
     {
@@ -142,76 +169,50 @@
       "reserve": 1
     },
     {
-      "key": "gold_or_platinum_bow",
+      "key": "gold_or_platinum_gear",
       "kind": "Obtain",
-      "label": "Gold or Platinum Bow",
+      "label": "Gold or Platinum Gear",
       "requires": [
         "gold_or_platinum_pickaxe",
         "bow"
       ],
-      "items": [
-        "GoldBow",
-        "PlatinumBow"
-      ]
-    },
-    {
-      "key": "gold_or_platinum_sword",
-      "kind": "Obtain",
-      "label": "Gold or Platinum Broadsword",
-      "requires": [
-        "gold_or_platinum_pickaxe"
-      ],
-      "items": [
-        "GoldBroadsword",
-        "PlatinumBroadsword"
-      ]
-    },
-    {
-      "key": "gold_or_platinum_axe",
-      "kind": "Obtain",
-      "label": "Gold or Platinum Axe",
-      "requires": [
-        "gold_or_platinum_pickaxe"
-      ],
-      "items": [
-        "GoldAxe",
-        "PlatinumAxe"
-      ]
-    },
-    {
-      "key": "gold_or_platinum_helmet",
-      "kind": "Obtain",
-      "label": "Gold or Platinum Helmet",
-      "requires": [
-        "gold_or_platinum_pickaxe"
-      ],
-      "items": [
-        "GoldHelmet",
-        "PlatinumHelmet"
-      ]
-    },
-    {
-      "key": "gold_or_platinum_chainmail",
-      "kind": "Obtain",
-      "label": "Gold or Platinum Chainmail",
-      "requires": [
-        "gold_or_platinum_pickaxe"
-      ],
-      "items": [
-        "GoldChainmail",
-        "PlatinumChainmail"
-      ]
-    },
-    {
-      "key": "gold_or_platinum_greaves",
-      "kind": "Obtain",
-      "label": "Gold or Platinum Greaves",
-      "requires": [
-        "gold_or_platinum_pickaxe"
-      ],
-      "items": [
-        "GoldGreaves",
-        "PlatinumGreaves"
+      "all": [
+        {
+          "any": [
+            "GoldBow",
+            "PlatinumBow"
+          ]
+        },
+        {
+          "any": [
+            "GoldBroadsword",
+            "PlatinumBroadsword"
+          ]
+        },
+        {
+          "any": [
+            "GoldAxe",
+            "PlatinumAxe"
+          ]
+        },
+        {
+          "any": [
+            "GoldHelmet",
+            "PlatinumHelmet"
+          ]
+        },
+        {
+          "any": [
+            "GoldChainmail",
+            "PlatinumChainmail"
+          ]
+        },
+        {
+          "any": [
+            "GoldGreaves",
+            "PlatinumGreaves"
+          ]
+        }
       ]
     },
     {
@@ -221,10 +222,14 @@
       "requires": [
         "gold_or_platinum_pickaxe"
       ],
-      "items": [
-        "Lens"
+      "all": [
+        {
+          "any": [
+            "Lens"
+          ],
+          "count": 6
+        }
       ],
-      "count": 6,
       "when": "Night",
       "source": "DemonEye"
     },
@@ -235,8 +240,12 @@
       "requires": [
         "lens"
       ],
-      "items": [
-        "SuspiciousLookingEye"
+      "all": [
+        {
+          "any": [
+            "SuspiciousLookingEye"
+          ]
+        }
       ]
     },
     {
@@ -245,9 +254,7 @@
       "label": "Eye of Cthulhu",
       "requires": [
         "suspicious_eye",
-        "gold_or_platinum_helmet",
-        "gold_or_platinum_chainmail",
-        "gold_or_platinum_greaves"
+        "gold_or_platinum_gear"
       ],
       "creatures": [
         "EyeofCthulhu"
@@ -263,10 +270,14 @@
         "eoc",
         "iron_or_lead_pickaxe"
       ],
-      "items": [
-        "DemoniteOre"
-      ],
-      "count": 30
+      "all": [
+        {
+          "any": [
+            "DemoniteOre"
+          ],
+          "count": 30
+        }
+      ]
     },
     {
       "key": "evil_boss",
@@ -288,10 +299,14 @@
       "requires": [
         "evil_boss"
       ],
-      "items": [
-        "ShadowScale"
-      ],
-      "count": 20
+      "all": [
+        {
+          "any": [
+            "ShadowScale"
+          ],
+          "count": 20
+        }
+      ]
     },
     {
       "key": "evil_pickaxe",
@@ -300,8 +315,12 @@
       "requires": [
         "shadow_scale"
       ],
-      "items": [
-        "NightmarePickaxe"
+      "all": [
+        {
+          "any": [
+            "NightmarePickaxe"
+          ]
+        }
       ]
     },
     {
@@ -311,10 +330,14 @@
       "requires": [
         "evil_pickaxe"
       ],
-      "items": [
-        "Hellstone"
-      ],
-      "count": 60
+      "all": [
+        {
+          "any": [
+            "Hellstone"
+          ],
+          "count": 60
+        }
+      ]
     },
     {
       "key": "molten_pickaxe",
@@ -323,8 +346,12 @@
       "requires": [
         "hellstone"
       ],
-      "items": [
-        "MoltenPickaxe"
+      "all": [
+        {
+          "any": [
+            "MoltenPickaxe"
+          ]
+        }
       ]
     },
     {
@@ -334,8 +361,12 @@
       "requires": [
         "hellstone"
       ],
-      "items": [
-        "MoltenHelmet"
+      "all": [
+        {
+          "any": [
+            "MoltenHelmet"
+          ]
+        }
       ]
     },
     {
@@ -345,8 +376,12 @@
       "requires": [
         "hellstone"
       ],
-      "items": [
-        "GuideVoodooDoll"
+      "all": [
+        {
+          "any": [
+            "GuideVoodooDoll"
+          ]
+        }
       ],
       "source": "VoodooDemon"
     },

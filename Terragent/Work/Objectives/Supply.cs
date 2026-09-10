@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terragent.Controls;
 using Terragent.Work.Jobs;
+using Terragent.World;
 
 namespace Terragent.Work.Objectives;
 
@@ -69,8 +70,8 @@ internal sealed class Supply : IObjective
         _short = _bag.Carrying(_itemID) < (_short ? _ceiling : _restockAt);
 
     /// <summary>What restocking still needs, once it has started.</summary>
-    public IReadOnlyDictionary<int, int> Missing() =>
-        _short ? _filling.Missing() : new Dictionary<int, int>();
+    public IReadOnlyList<NeededItem> NeededItems() =>
+        _short ? _filling.NeededItems() : [];
 
     /// <summary>The work of restocking, and nothing at all while it is stocked.</summary>
     public IReadOnlyList<IJob> Jobs() => _short ? _filling.Jobs() : [];

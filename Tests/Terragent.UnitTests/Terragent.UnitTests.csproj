@@ -45,7 +45,8 @@
     <Compile Include="..\..\Terragent\World\TileKind.cs" />
     <Compile Include="..\..\Terragent\World\Ground.cs" />
     <Compile Include="..\..\Terragent\World\CraftingRecipe.cs" />
-    <Compile Include="..\..\Terragent\World\Need.cs" />
+    <Compile Include="..\..\Terragent\World\RecipeNode.cs" />
+    <Compile Include="..\..\Terragent\World\NeededItem.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\StepKind.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Edge.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Destination.cs" />

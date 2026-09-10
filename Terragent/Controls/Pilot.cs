@@ -101,8 +101,26 @@ internal sealed class Pilot(
         Press(route.Steps[_step], at);
     }
 
-    public RouteMatch? FindRoute(IReadOnlyList<Destination> destinations) =>
-        _navigator.FindRoute(_body.Footing, destinations, Ability(), _refusedMoves);
+    public RouteMatch? FindRoute(IReadOnlyList<Destination> destinations)
+    {
+        RouteMatch? reached =
+            _navigator.FindRoute(_body.Footing, destinations, Ability(), _refusedMoves);
+        if (reached is not null)
+        {
+            return reached;
+        }
+
+        // What the search was working with, on the tick it came back with nothing. The
+        // caller can say where it was trying to go; only this end knows what the body was
+        // carrying, and a pickaxe too weak or nothing that lights are the two answers that
+        // look identical from outside.
+        Point at = _body.Footing;
+        journal.Change("unwalkable", $"nothing of {destinations.Count} from "
+            + $"({at.X}, {at.Y}): pickaxe {_bag.PickPower}, blocks {_bag.Blocks}, "
+            + $"lights {_bag.Carrying(Lights.Dark)}, wet lights {_bag.Carrying(Lights.Wet)}, "
+            + $"{_refusedMoves.Count} moves struck out");
+        return null;
+    }
 
     /// <summary>Take this destination and the route already found to it.</summary>
     // The route is given rather than looked for. Choosing among offers searched for one

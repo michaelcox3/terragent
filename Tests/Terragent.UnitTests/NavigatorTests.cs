@@ -123,6 +123,86 @@ public class NavigatorTests
     // near enough, then a body on the ledge above it holding a pickaxe it could not swing
     // that far down. Both searches below are the offer search, over one goal, differing
     // only in what the destination says arriving is. They must settle in different places.
+    /// <summary>A shaft can be sunk through solid ground to a point well below.</summary>
+    // What exploring underground comes down to: the run stands in its own shaft and asks
+    // for a footing twenty rows down.
+    [Fact]
+    public void ItDigsStraightDownThroughSolidGround()
+    {
+        Grid grid = new(true,
+            "         ",
+            "         ",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########",
+            "#########");
+
+        Route? route = new Navigator(grid).FindRoute(
+            new Point(4, 2),
+            new Destination(new Point(4, 19), Within: 3, Budget: 3000),
+            new Ability(Prices, PickPower, Jump, 0),
+            new HashSet<(Point, Point)>());
+
+        Assert.NotNull(route);
+    }
+
+    /// <summary>A shaft is sunk even when there is open ground to wander instead.</summary>
+    // The estimate prices what is left as walking, and digging costs ten times a walk, so
+    // every footing in an open cavern looks cheaper than the first tile of a shaft. A
+    // search let loose in a revealed cavern spends its whole budget out there and comes
+    // back with nothing, which reads exactly like ground it cannot dig.
+    [Fact]
+    public void ItDigsDownRatherThanSpendingItsBudgetWandering()
+    {
+        Grid grid = new(true,
+            "                                                            ",
+            "                                                            ",
+            "                                                            ",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################",
+            "############################################################");
+
+        Route? route = new Navigator(grid).FindRoute(
+            new Point(30, 3),
+            new Destination(new Point(30, 20), Within: 3, Budget: 3000),
+            new Ability(Prices, PickPower, Jump, 0),
+            new HashSet<(Point, Point)>());
+
+        Assert.NotNull(route);
+    }
+
     [Fact]
     public void ChoosingAmongOffersAsksEachHowCloseCounts()
     {

@@ -168,26 +168,36 @@ public sealed class Panel : ModSystem, IPanel
     }
 
     /// <summary>The state of the run, one line at a time.</summary>
+    /// <summary>Two objectives short of the same thing, added up option by option.</summary>
+    // Option by option, because the options are alternatives and the totals are not. Two
+    // objectives each short of thirty iron ore or forty five lead ore want sixty of one or
+    // ninety of the other, never sixty and ninety at once.
+    private static NeededItem Added(NeededItem had, NeededItem more)
+    {
+        List<(int ItemID, int Count)> options = [];
+        for (int n = 0; n < had.Options.Count; n++)
+        {
+            options.Add(n < more.Options.Count
+                ? (had.Options[n].ItemID, had.Options[n].Count + more.Options[n].Count)
+                : had.Options[n]);
+        }
+
+        return new NeededItem(options);
+    }
+
     private static List<string> Lines(IAgent agent)
     {
         IForeman foreman = agent.Foreman;
         List<string> lines = [$"Reached: {agent.Reached.Count}", string.Empty];
 
-        // Asked of the run rather than of the objective in hand. The graph is what knows
-        // which nodes are workable; the foreman is handed one thing to offer jobs from and
-        // has no business being the place a reader finds out what the run is up to.
-        IReadOnlyList<IObjective> active = agent.Progression.Active();
+        // Read, never worked out. Everything on this panel is an answer some part of the
+        // engine already has, and a display that derives one can disagree with the thing
+        // it is describing.
+        IReadOnlyList<IObjective> active = foreman.Objectives;
         lines.Add(active.Count == 0 ? "Objectives: nothing left it can do" : "Objectives");
         foreach (IObjective live in active)
         {
-            // What is being worked, not what is on the graph. A supply sits in the list
-            // whether or not it is short, because a stocked one offers no jobs and so
-            // costs nothing to leave there; showing it says the run is chasing torches
-            // when it has sixty.
-            if (!live.Met)
-            {
-                lines.Add($"    {live.Label}");
-            }
+            lines.Add($"    {live.Label}");
         }
 
         lines.Add(string.Empty);
@@ -206,39 +216,46 @@ public sealed class Panel : ModSystem, IPanel
         // Added up across every live objective, because two of them wanting wood want the
         // total between them, and one of the two numbers would say the run was nearly done
         // with a trip it had barely started.
-        Dictionary<int, int> wanted = [];
+        //
+        // Not across the options of one, which are alternatives: thirty iron ore or forty
+        // five lead ore is one line and one need, and adding them would be a shopping list
+        // for a world that has both.
+        Dictionary<int, NeededItem> wanted = [];
         foreach (IObjective objective in active)
         {
-            foreach (KeyValuePair<int, int> want in objective.Missing())
+            foreach (NeededItem want in objective.NeededItems())
             {
-                wanted[want.Key] = wanted.TryGetValue(want.Key, out int had)
-                    ? had + want.Value
-                    : want.Value;
+                wanted[want.ItemID] = wanted.TryGetValue(want.ItemID, out NeededItem? had)
+                    ? Added(had, want)
+                    : want;
             }
         }
 
-        foreach (KeyValuePair<int, int> want in wanted)
+        foreach (NeededItem want in wanted.Values)
         {
-            lines.Add($"    {Names.Item(want.Key)} x{want.Value}");
+            List<string> options = [];
+            foreach ((int itemID, int owed) in want.Options)
+            {
+                options.Add($"{Names.Item(itemID)} x{owed}");
+            }
+
+            lines.Add($"    {string.Join(" or ", options)}");
         }
 
         lines.Add(string.Empty);
         lines.Add("Jobs");
 
-        // What the objective is offering, with the one in hand marked. A list of one
+        // What the foreman last chose out of, with the one in hand marked. A list of one
         // means every other job has no site, which is usually the answer to why it is
         // doing something odd.
         //
-        // Matched by name rather than by instance: the objective builds fresh jobs every
-        // time it is asked, so nothing in this list is the object the foreman holds.
-        foreach (IObjective objective in active)
+        // Matched by name rather than by instance: a job is rebuilt every time the
+        // objectives are asked, so nothing in this list is the object the foreman holds.
+        foreach (IJob job in foreman.Offered)
         {
-            foreach (IJob job in objective.Jobs())
-            {
-                lines.Add(job.Label == foreman.Job?.Label
-                    ? $"  > {job.Label}"
-                    : $"    {job.Label}");
-            }
+            lines.Add(job.Label == foreman.Job?.Label
+                ? $"  > {job.Label}"
+                : $"    {job.Label}");
         }
 
         lines.Add(string.Empty);

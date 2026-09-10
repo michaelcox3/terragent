@@ -38,8 +38,27 @@ internal sealed class Hunt(
     /// <summary>How near counts as having got there.</summary>
     private const int Roughly = 3;
 
+    /// <summary>How far to go at once on the way down to a band, in tiles.</summary>
+    private const int Leg = 20;
+
+    /// <summary>Footings a leg may look at before giving up on it.</summary>
+    // Generous, not thrifty. The leg already bounds how far the body goes; the budget
+    // bounds how hard the search may look, and digging is where it has to look hardest.
+    // The estimate prices what is left as walking, and a dug tile costs ten times a step,
+    // so every footing in a revealed cavern looks cheaper than the first tile of a shaft
+    // and the search works through all of them before it starts cutting.
+    private const int Reach = 20000;
+
     // Only somewhere to be, so there is nothing to be the same attempt about.
     public string Label => $"Hunting for {looking}";
+
+    /// <summary>Two hunts for the same kinds of creature are one piece of work.</summary>
+    // By the label, which is made of the same thing the work is: the item, or the kinds.
+    public bool Equals(IJob? other) => other is Hunt same && same.Label == Label;
+
+    public override bool Equals(object? other) => Equals(other as IJob);
+
+    public override int GetHashCode() => System.HashCode.Combine(nameof(Hunt), Label);
 
     /// <summary>Done the moment one of them is in view.</summary>
     public bool Done => _creatures.Nearest(_body.Footing, types) is not null;
@@ -57,14 +76,23 @@ internal sealed class Hunt(
         // Already in the band, so the answer is to keep walking rather than to travel.
         // Which way alternates with where the body happens to be, so a run that reaches
         // one end comes back rather than pressing into the wall.
-        int row = Layers.At(from.Y) == band ? from.Y : Layers.EntryRow(band);
-        int across = Layers.At(from.Y) == band ? Pace * Way(from) : 0;
+        // In the band already, so the answer is to keep walking along it. The ground is
+        // known and the walk is sideways, so it goes in one piece.
+        if (Layers.At(from.Y) == band)
+        {
+            Point wanted = new(from.X + (Pace * Way(from)), from.Y);
+            Point ground = _terrain.Under(wanted);
+            return _terrain.Standable(ground)
+                ? new Offer(new TileTarget(ground), new Destination(ground, Roughly))
+                : null;
+        }
 
-        Point wanted = new(from.X + across, row);
-        Point ground = _terrain.Under(wanted);
-        return _terrain.Standable(ground)
-            ? new Offer(new TileTarget(ground), new Destination(ground, Roughly))
-            : null;
+        // Getting to it, which is a dig, and one leg of it at a time for the same reason
+        // exploring goes in legs: one route through all of it runs out of budget having
+        // cut nowhere.
+        Point entry = new(from.X, Layers.EntryRow(band));
+        Point leg = Destination.Toward(from, entry, Leg);
+        return new Offer(new TileTarget(leg), new Destination(leg, Roughly, Budget: Reach));
     }
 
     // Nothing to do on arrival. Being there is the work, and the game does the rest.

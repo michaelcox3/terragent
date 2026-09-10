@@ -35,6 +35,12 @@ internal interface IForeman
     // every tick and a job dropped every tick is a body that never arrives anywhere.
     IReadOnlyList<IObjective> Objectives { get; set; }
 
+    /// <summary>Everything it last had to choose from, one job per kind of work.</summary>
+    // Pooled and deduplicated here and once. A reader wants the same list the choice was
+    // made out of, and building a second one costs a recipe walk per objective per frame
+    // and can disagree with this one about what is on offer.
+    IReadOnlyList<IJob> Offered { get; }
+
     /// <summary>The job being seen through, or null when none is chosen.</summary>
     IJob? Job { get; }
 

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Terragent.World;
 
 namespace Terragent.UnitTests;
@@ -25,6 +27,8 @@ public class RecipeTreeTests
     private const int WoodPlatform = 11;
     private const int Torch = 12;
     private const int Gel = 13;
+    private const int LeadPickaxe = 14;
+    private const int LeadAnvil = 15;
 
     private const int Anvils = 100;
     private const int Furnaces = 101;
@@ -35,12 +39,20 @@ public class RecipeTreeTests
 
     private static readonly List<CraftingRecipe> Book =
     [
-        Craft(IronPickaxe, [(IronBar, 12, [LeadBar]), (Wood, 3, [])], [(IronAnvil, Anvils)]),
-        Craft(IronBar, [(IronOre, 3, [])], [(Furnace, Furnaces)], yields: 1),
-        Craft(LeadBar, [(LeadOre, 3, [])], [(Furnace, Furnaces)], yields: 1),
-        Craft(IronAnvil, [(IronBar, 5, [LeadBar])], [(WorkBench, WorkBenches)]),
+        Craft(IronPickaxe, [(IronBar, 12, [LeadBar]), (Wood, 3, [])], [(IronAnvil, [LeadAnvil], Anvils)]),
+
+        // The same tool in the other metal, which is what an objective names beside the
+        // first: either one ends the errand, and a world grows one of them.
+        Craft(LeadPickaxe, [(LeadBar, 12, []), (Wood, 3, [])], [(IronAnvil, [LeadAnvil], Anvils)]),
+        Craft(IronBar, [(IronOre, 3, [])], [(Furnace, [], Furnaces)], yields: 1),
+        Craft(LeadBar, [(LeadOre, 3, [])], [(Furnace, [], Furnaces)], yields: 1),
+        Craft(IronAnvil, [(IronBar, 5, [LeadBar])], [(WorkBench, [], WorkBenches)]),
+
+        // The same tile in the other metal. One tile is anvils and two items place it, so
+        // a lead world can stand one up out of what it has.
+        Craft(LeadAnvil, [(LeadBar, 5, [IronBar])], [(WorkBench, [], WorkBenches)]),
         Craft(Furnace, [(Stone, 20, []), (Wood, 4, []), (Torch, 3, [])],
-            [(WorkBench, WorkBenches)]),
+            [(WorkBench, [], WorkBenches)]),
         Craft(WorkBench, [(Wood, 10, [])], []),
 
         // Three at a time, which is why wanting three is one craft and one gel.
@@ -55,16 +67,16 @@ public class RecipeTreeTests
     /// <summary>One row of the book: what it makes, from what, at what.</summary>
     private static CraftingRecipe Craft(int makes,
         (int ItemID, int Count, IReadOnlyList<int> Instead)[] items,
-        (int ItemID, int TileID)[] stations,
+        (int ItemID, IReadOnlyList<int> Instead, int TileID)[] stations,
         int yields = 1) =>
         new(makes, yields, items, stations);
 
-    private static Need Pickaxe() => new RecipeTree(Book, Found.Contains).Of(IronPickaxe, 6);
+    private static RecipeNode Pickaxe() => new RecipeTree(Book, Found.Contains).Of(IronPickaxe, 6);
 
     [Fact]
     public void ThePickaxeIsCraftedAtAnAnvil()
     {
-        Need tree = Pickaxe();
+        RecipeNode tree = Pickaxe();
 
         Assert.Equal(IronPickaxe, tree.ItemID);
         Assert.False(tree.Raw);
@@ -74,7 +86,7 @@ public class RecipeTreeTests
     [Fact]
     public void ItWantsTwelveBarsAndThreeWood()
     {
-        Need tree = Pickaxe();
+        RecipeNode tree = Pickaxe();
 
         Assert.Equal(12, Wants(tree, IronBar));
         Assert.Equal(3, Wants(tree, Wood));
@@ -91,7 +103,7 @@ public class RecipeTreeTests
     [Fact]
     public void OreAndWoodAreTheLeaves()
     {
-        Need tree = Pickaxe();
+        RecipeNode tree = Pickaxe();
 
         Assert.True(Under(tree, Wood).Raw);
         Assert.False(Under(tree, IronBar).Raw);
@@ -103,7 +115,7 @@ public class RecipeTreeTests
     {
         // The station is a thing to obtain, not a condition: an anvil is five bars at a
         // bench, and the bench is ten wood, so wanting a pickaxe wants wood twice over.
-        Need anvil = Under(Pickaxe(), IronAnvil);
+        RecipeNode anvil = Under(Pickaxe(), IronAnvil);
 
         Assert.Equal([(WorkBench, WorkBenches)], [.. Stations(anvil)]);
         Assert.Equal(5, Wants(anvil, IronBar));
@@ -123,6 +135,102 @@ public class RecipeTreeTests
     public void ADepthOfNoneIsALeafWhateverMakesIt()
     {
         Assert.True(new RecipeTree(Book, Found.Contains).Of(IronPickaxe, 0).Raw);
+    }
+
+    /// <summary>The named option of each needed item, so a count can be asserted.</summary>
+    // The walk answers with alternatives now. These tests are about the arithmetic, so
+    // they read the option the recipe names and OreOrItsStandIn covers the rest.
+    private static Dictionary<int, int> Totals(IReadOnlyList<NeededItem> missing)
+    {
+        Dictionary<int, int> totals = [];
+        foreach (NeededItem want in missing)
+        {
+            totals[want.ItemID] = want.Count;
+        }
+
+        return totals;
+    }
+
+    /// <summary>What an objective naming both pickaxes comes down to.</summary>
+    // The shape Obtain hands the walk: the first item as the root, the rest of the same
+    // want as stand-ins beside it. Written out so a change to the alternatives shows up as
+    // a diff rather than as a count nobody can place.
+    [Fact]
+    public void EitherPickaxeIsOneErrand()
+    {
+        RecipeTree book = new(Book, Found.Contains);
+        IReadOnlyList<NeededItem> missing = RecipeTree.Missing(
+            [(book.Of(IronPickaxe, 6), 1, new[] { book.Of(LeadPickaxe, 6) })],
+            _ => 0,
+            _ => false);
+
+        List<string> lines = [];
+        foreach (NeededItem want in missing)
+        {
+            List<string> options = [];
+            foreach ((int itemID, int count) in want.Options)
+            {
+                options.Add($"{count}x {Names[itemID]}");
+            }
+
+            lines.Add(string.Join(" or ", options));
+        }
+
+        Assert.Equal(
+            """
+            18x Wood
+            20x Stone
+            1x Gel
+            51x Iron Ore or 51x Lead Ore
+            """,
+            string.Join("\n", lines));
+    }
+
+    /// <summary>One bench is charged once for everything made at it.</summary>
+    // Six pieces of gold armour are one objective and one anvil, not six. Walked one at a
+    // time the bench under each is a fresh ten wood, so the run is told to gather sixty for
+    // a bench it will only ever build one of, and the trip does not finish until it has
+    // them. Walked together the stations already counted are shared and the bench is paid
+    // for once.
+    [Fact]
+    public void OneBenchIsChargedOnceForEverythingMadeAtIt()
+    {
+        RecipeTree book = new(Book, Found.Contains);
+        RecipeNode iron = book.Of(IronBar, 6);
+        RecipeNode lead = book.Of(LeadBar, 6);
+
+        // Ten wood for the bench and five for the furnace stood on it, either way round.
+        // Walked apart each pays the whole fifteen, so added up the run is told to gather
+        // thirty for one furnace.
+        Assert.Equal(15, Totals(RecipeTree.Missing(iron, 3, _ => 0, _ => false))[Wood]);
+        Assert.Equal(15, Totals(RecipeTree.Missing(lead, 3, _ => 0, _ => false))[Wood]);
+
+        Dictionary<int, int> together = Totals(RecipeTree.Missing(
+            [(iron, 3, []), (lead, 3, [])], _ => 0, _ => false));
+
+        Assert.Equal(15, together[Wood]);
+
+        // The ore is not shared, because ore is spent and a station is not. Three bars of
+        // each is nine of each however they are walked.
+        Assert.Equal(9, together[IronOre]);
+        Assert.Equal(9, together[LeadOre]);
+    }
+
+    /// <summary>A recipe group comes back as one need with two ways to fill it.</summary>
+    // Not two entries. The pickaxe wants twelve bars of iron or of lead, so the ore under
+    // them is one thing to go and get, and a world grows one metal or the other. Flattened
+    // to a map the "or" had nowhere to live and the stand-in was thrown away, which left
+    // the run mining lead only because the progression happened to name a lead pickaxe as
+    // a second objective.
+    [Fact]
+    public void OreComesBackWithItsStandIn()
+    {
+        IReadOnlyList<NeededItem> missing =
+            RecipeTree.Missing(Pickaxe(), 1, _ => 0, _ => false);
+
+        NeededItem ore = missing.First(want => want.ItemID == IronOre);
+
+        Assert.Equal([(IronOre, 51), (LeadOre, 51)], [.. ore.Options]);
     }
 
     /// <summary>The whole answer for one item, written out so it can be read.</summary>
@@ -170,7 +278,7 @@ public class RecipeTreeTests
     [Fact]
     public void OneIronPickaxeCostsFiftyOneOre()
     {
-        IReadOnlyDictionary<int, int> raw = RecipeTree.Missing(Pickaxe(), 1, _ => 0, _ => false);
+        Dictionary<int, int> raw = Totals(RecipeTree.Missing(Pickaxe(), 1, _ => 0, _ => false));
 
         // Twelve bars for the pickaxe and five for the anvil, three ore each.
         Assert.Equal(51, raw[IronOre]);
@@ -192,8 +300,9 @@ public class RecipeTreeTests
     [Fact]
     public void CarriedBarsAreSpentOnce()
     {
-        IReadOnlyDictionary<int, int> left =
-            RecipeTree.Missing(Pickaxe(), 1, item => item == IronBar ? 5 : 0, _ => false);
+        Dictionary<int, int> left =
+            Totals(RecipeTree.Missing(Pickaxe(), 1, item => item == IronBar ? 5 : 0,
+                _ => false));
 
         Assert.Equal(36, left[IronOre]);
     }
@@ -202,8 +311,9 @@ public class RecipeTreeTests
     [Fact]
     public void OwningTheAnvilRemovesItsWholeBranch()
     {
-        IReadOnlyDictionary<int, int> left =
-            RecipeTree.Missing(Pickaxe(), 1, item => item == IronAnvil ? 1 : 0, _ => false);
+        Dictionary<int, int> left =
+            Totals(RecipeTree.Missing(Pickaxe(), 1, item => item == IronAnvil ? 1 : 0,
+                _ => false));
 
         // Thirty six for the pickaxe, and none of the anvil's fifteen.
         Assert.Equal(36, left[IronOre]);
@@ -230,11 +340,14 @@ public class RecipeTreeTests
     [Fact]
     public void StationsAreCollectedFromTheWholeTree()
     {
-        IReadOnlyDictionary<int, int> stations = RecipeTree.Stations(Pickaxe());
+        IReadOnlyDictionary<int, IReadOnlyList<int>> stations = RecipeTree.Stations(Pickaxe());
 
-        Assert.Equal(WorkBench, stations[WorkBenches]);
-        Assert.Equal(IronAnvil, stations[Anvils]);
-        Assert.Equal(Furnace, stations[Furnaces]);
+        Assert.Equal([WorkBench], stations[WorkBenches]);
+        Assert.Equal([Furnace], stations[Furnaces]);
+
+        // Two items place one tile, and both are kept: a lead world stands its anvil up
+        // out of the lead it has rather than owing five iron bars it can never get.
+        Assert.Equal([IronAnvil, LeadAnvil], stations[Anvils]);
     }
 
     [Fact]
@@ -288,7 +401,7 @@ public class RecipeTreeTests
             _ => 0,
         };
 
-        Need tree = new RecipeTree(Book, Found.Contains).Of(Torch, 6);
+        RecipeNode tree = new RecipeTree(Book, Found.Contains).Of(Torch, 6);
 
         Assert.Empty(RecipeTree.Missing(tree, 1, Held, _ => false));
         Assert.Equal(Torch, RecipeTree.Craftable(tree, 1, Held, _ => false)!.Value.Node.ItemID);
@@ -300,11 +413,12 @@ public class RecipeTreeTests
         [IronOre] = "Iron Ore", [LeadOre] = "Lead Ore", [Wood] = "Wood",
         [WorkBench] = "Work Bench", [IronAnvil] = "Iron Anvil", [Furnace] = "Furnace",
         [Stone] = "Stone", [WoodPlatform] = "Wood Platform",
-        [Torch] = "Torch", [Gel] = "Gel",
+        [Torch] = "Torch", [Gel] = "Gel", [LeadPickaxe] = "Lead Pickaxe",
+        [LeadAnvil] = "Lead Anvil",
         [Anvils] = "Anvils", [Furnaces] = "Furnaces", [WorkBenches] = "Work Benches",
     };
 
-    private static string Draw(Need node, int depth, string before = "", string after = "")
+    private static string Draw(RecipeNode node, int depth, string before = "", string after = "")
     {
         System.Text.StringBuilder lines = new();
         lines.Append(new string(' ', depth * 2))
@@ -314,15 +428,15 @@ public class RecipeTreeTests
             .Append(node.Raw ? " (raw)" : string.Empty)
             .Append('\n');
 
-        foreach ((Need station, int tileID) in node.Stations)
+        foreach ((RecipeNode station, IReadOnlyList<RecipeNode> _, int tileID) in node.Stations)
         {
             lines.Append(Draw(station, depth + 1, $"at {Names[tileID]}: "));
         }
 
-        foreach ((Need need, int count, IReadOnlyList<Need> instead) in node.Needs)
+        foreach ((RecipeNode need, int count, IReadOnlyList<RecipeNode> instead) in node.Needs)
         {
             List<string> others = [];
-            foreach (Need other in instead)
+            foreach (RecipeNode other in instead)
             {
                 others.Add(Names[other.ItemID]);
             }
@@ -334,18 +448,18 @@ public class RecipeTreeTests
         return lines.ToString();
     }
 
-    private static IEnumerable<(int ItemID, int TileID)> Stations(Need node)
+    private static IEnumerable<(int ItemID, int TileID)> Stations(RecipeNode node)
     {
-        foreach ((Need station, int tileID) in node.Stations)
+        foreach ((RecipeNode station, IReadOnlyList<RecipeNode> _, int tileID) in node.Stations)
         {
             yield return (station.ItemID, tileID);
         }
     }
 
     /// <summary>How many of an item a node calls for.</summary>
-    private static int Wants(Need node, int itemID)
+    private static int Wants(RecipeNode node, int itemID)
     {
-        foreach ((Need need, int count, IReadOnlyList<Need> _) in node.Needs)
+        foreach ((RecipeNode need, int count, IReadOnlyList<RecipeNode> _) in node.Needs)
         {
             if (need.ItemID == itemID)
             {
@@ -356,16 +470,16 @@ public class RecipeTreeTests
         return 0;
     }
 
-    private static IEnumerable<int> Instead(Need node, int itemID)
+    private static IEnumerable<int> Instead(RecipeNode node, int itemID)
     {
-        foreach ((Need need, int _, IReadOnlyList<Need> instead) in node.Needs)
+        foreach ((RecipeNode need, int _, IReadOnlyList<RecipeNode> instead) in node.Needs)
         {
             if (need.ItemID != itemID)
             {
                 continue;
             }
 
-            foreach (Need other in instead)
+            foreach (RecipeNode other in instead)
             {
                 yield return other.ItemID;
             }
@@ -373,9 +487,9 @@ public class RecipeTreeTests
     }
 
     /// <summary>A child of this node, station or material, by item.</summary>
-    private static Need Under(Need node, int itemID)
+    private static RecipeNode Under(RecipeNode node, int itemID)
     {
-        foreach ((Need station, int _) in node.Stations)
+        foreach ((RecipeNode station, IReadOnlyList<RecipeNode> _, int _) in node.Stations)
         {
             if (station.ItemID == itemID)
             {
@@ -383,7 +497,7 @@ public class RecipeTreeTests
             }
         }
 
-        foreach ((Need need, int _, IReadOnlyList<Need> _) in node.Needs)
+        foreach ((RecipeNode need, int _, IReadOnlyList<RecipeNode> _) in node.Needs)
         {
             if (need.ItemID == itemID)
             {
