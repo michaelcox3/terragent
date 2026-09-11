@@ -35,6 +35,8 @@ internal sealed class Body(Player player) : IBody
         Collision.SolidCollision(_player.position + new Vector2(0f, 1f),
             _player.width, _player.height, acceptTopSurfaces: true);
 
+    public bool Submerged => _player.wet || _player.lavaWet || _player.honeyWet;
+
     public float RunSpeed => _player.maxRunSpeed;
 
     /// <summary>How fast this character leaves the ground, with what it is wearing.</summary>

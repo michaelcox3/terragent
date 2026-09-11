@@ -19,6 +19,12 @@ internal interface IBody
     /// <summary>Whether something is holding it up. False in the air, jumping or falling.</summary>
     bool Grounded { get; }
 
+    /// <summary>Whether the body is in liquid of any kind.</summary>
+    // The game's own answer rather than the map's. Everything the map says is gated on the
+    // cell having been revealed, and under water in the dark nothing has been, so the one
+    // moment this has to be right is the moment the map reads dry.
+    bool Submerged { get; }
+
     /// <summary>Top speed sideways, in pixels per tick.</summary>
     // What a tile of level ground is worth, and the cap on how far a jump carries. Boots
     // and a wet floor both change it, so it is read rather than assumed.

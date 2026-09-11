@@ -124,6 +124,11 @@ internal sealed class Grid : ITerrain
 
     public bool IsKnown(int x, int y) => KindAt(x, y) is not TileKind.Unknown;
 
+    /// <summary>Lit wherever the picture shows something, and dark where it does not.</summary>
+    // A picture has no lamps in it. Tying the two together is the only honest reading:
+    // what the harness draws is what the character can see.
+    public float Brightness(int x, int y) => IsKnown(x, y) ? 1f : 0f;
+
     // Clearance and standability are ITerrain's own, derived from KindAt. This class
     // used to write its own copies and they drifted from Terrain's, so a scenario could
     // pass here and fail in the arena with each level telling the truth about its own

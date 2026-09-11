@@ -59,12 +59,12 @@ public sealed class AgentPlayer : ModPlayer
         // and the same in every world.
         IRecipeTree recipes = new RecipeTree(Recipes.Book(), Recipes.Gathered);
 
+        ISites sites = new Sites(terrain);
         IProgression progression = Progression.Read(Mod, recipes, terrain, bag, hand, body,
-            new Sites(terrain), new Drops(terrain), new Creatures(terrain), clock,
-            journal);
+            sites, new Drops(terrain), new Creatures(terrain), clock, journal);
 
-        _agent = new Agent(progression, new Foreman(body, pilot, clock, journal), terrain,
-            journal);
+        _agent = new Agent(progression, new Foreman(body, pilot, clock, journal),
+            new Lamplighter(terrain, bag, hand, sites, body, journal), terrain, journal);
     }
 
     /// <summary>One tick of playing, at the point the game reads the controls.</summary>

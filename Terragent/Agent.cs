@@ -10,11 +10,12 @@ namespace Terragent;
 // Three lines of tick and nothing else, which is the point: what the run does next is
 // decided by the progression, and how it gets done is the foreman's. This holds the two
 // of them in the order they run and the switch that says whether to run them at all.
-internal sealed class Agent(IProgression progression, IForeman foreman, ITerrain terrain,
-    IJournal journal) : IAgent
+internal sealed class Agent(IProgression progression, IForeman foreman,
+    ILamplighter lamplighter, ITerrain terrain, IJournal journal) : IAgent
 {
     private readonly IProgression _progression = progression;
     private readonly IForeman _foreman = foreman;
+    private readonly ILamplighter _lamplighter = lamplighter;
     private readonly ITerrain _terrain = terrain;
 
     public bool Driving { get; set; }
@@ -44,6 +45,21 @@ internal sealed class Agent(IProgression progression, IForeman foreman, ITerrain
         // after something completes.
         _foreman.Objectives = _progression.Active();
         journal.Change("objectives", Said(_foreman.Objectives, _progression.Reached.Count));
+
+        // A lamp in hand first, which costs nothing: whatever works below takes the hand
+        // back for its own tool, so the only ticks this shows on are the ones nothing else
+        // wanted it for.
+        _lamplighter.Raise();
+
+        // Putting one up is different, and does take the tick. The foreman holds one job
+        // and refuses to reconsider, which is what it is for, so a run that walks into a
+        // cave keeps digging blind until the job ends: this is the one thing allowed to
+        // take a tick off it. A torch takes two ticks and buys the rest of the cave.
+        if (_lamplighter.Needed)
+        {
+            _lamplighter.Tick();
+            return;
+        }
 
         _foreman.Tick();
     }

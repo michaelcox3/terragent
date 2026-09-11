@@ -23,6 +23,8 @@ internal sealed class Terrain : ITerrain
 
     public bool IsKnown(int x, int y) => InBounds(x, y) && Main.Map.IsRevealed(x, y);
 
+    public float Brightness(int x, int y) => Lighting.Brightness(x, y);
+
     public int TypeAt(int x, int y)
     {
         if (!IsKnown(x, y))
