@@ -146,6 +146,7 @@ internal sealed class RecipeTree(IReadOnlyList<CraftingRecipe> book, Func<int, b
         Dictionary<int, List<(int ItemID, int Count)>> instead = [];
         Dictionary<int, int> stock = [];
         HashSet<int> built = [];
+        HashSet<int> covered = [];
 
         foreach ((RecipeNode node, int wanted, IReadOnlyList<RecipeNode> others) in all)
         {
@@ -157,13 +158,21 @@ internal sealed class RecipeTree(IReadOnlyList<CraftingRecipe> book, Func<int, b
             foreach (RecipeNode other in others)
             {
                 Instead(other, wanted, Added(before, totals), instead, bag, already,
-                    carrying, atStation, adds: false);
+                    carrying, atStation, adds: false, covered);
             }
         }
 
         List<NeededItem> short_ = [];
         foreach (KeyValuePair<int, int> want in totals)
         {
+            // Filled already, by the other way of filling it. A run holding forty five
+            // lead ore is not short of forty five iron ore, and saying so sent it looking
+            // for iron in a world that has none.
+            if (covered.Contains(want.Key))
+            {
+                continue;
+            }
+
             List<(int ItemID, int Count)> options = [(want.Key, want.Value)];
             if (instead.TryGetValue(want.Key, out List<(int ItemID, int Count)>? others))
             {
@@ -403,7 +412,7 @@ internal sealed class RecipeTree(IReadOnlyList<CraftingRecipe> book, Func<int, b
             foreach (RecipeNode other in spares)
             {
                 Instead(other, 1, Added(before, totals), instead, bag, already, carrying,
-                    atStation, adds: false);
+                    atStation, adds: false, covered: null);
             }
         }
 
@@ -436,7 +445,7 @@ internal sealed class RecipeTree(IReadOnlyList<CraftingRecipe> book, Func<int, b
             foreach (RecipeNode other in others)
             {
                 Instead(other, owed, Added(before, totals), instead, bag, already,
-                    carrying, atStation, adds: true);
+                    carrying, atStation, adds: true, covered: null);
             }
         }
     }
@@ -504,10 +513,13 @@ internal sealed class RecipeTree(IReadOnlyList<CraftingRecipe> book, Func<int, b
     // more, and lead would do for either, so the two entries owe fifty one lead ore
     // between them. A whole tree replaces: naming a lead pickaxe beside an iron one says
     // the same thing the bars already said, and added on top it read as eighty seven.
+    /// <param name="covered">
+    /// Items the stand-in turns out to have paid for already, which the caller drops.
+    /// </param>
     private static void Instead(RecipeNode other, int owed, Dictionary<int, int> named,
         Dictionary<int, List<(int ItemID, int Count)>> instead, Dictionary<int, int> bag,
         HashSet<int> already, Func<int, int> carrying, Func<int, bool> atStation,
-        bool adds)
+        bool adds, HashSet<int>? covered)
     {
         Dictionary<int, int> mirrored = [];
         Gather(other, owed, mirrored, [], new Dictionary<int, int>(bag), carrying,
@@ -515,6 +527,19 @@ internal sealed class RecipeTree(IReadOnlyList<CraftingRecipe> book, Func<int, b
 
         List<int> ours = Heavier(named, mirrored);
         List<int> theirs = Heavier(mirrored, named);
+
+        // The stand-in wants nothing the named side does not, which can only mean the bag
+        // already covers it: forty five lead ore in hand is a pickaxe's worth of ore, and
+        // the iron the other branch is asking for is not owed at all.
+        if (theirs.Count == 0 && covered is not null)
+        {
+            foreach (int itemID in ours)
+            {
+                covered.Add(itemID);
+            }
+
+            return;
+        }
 
         for (int n = 0; n < ours.Count && n < theirs.Count; n++)
         {

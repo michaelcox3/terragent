@@ -186,6 +186,30 @@ public class RecipeTreeTests
             string.Join("\n", lines));
     }
 
+    /// <summary>Ore in hand of either metal ends the errand for both.</summary>
+    // Options are two ways of filling one need, so filling either fills it. Reported per
+    // branch, a run holding all the lead it could want was still told it needed forty five
+    // iron ore, and went looking for iron in a world that has none.
+    [Fact]
+    public void OreOfEitherMetalSettlesTheNeed()
+    {
+        RecipeTree book = new(Book, Found.Contains);
+        (RecipeNode, int, IReadOnlyList<RecipeNode>)[] pickaxe =
+            [(book.Of(IronPickaxe, 6), 1, new[] { book.Of(LeadPickaxe, 6) })];
+
+        // Nothing carried: either metal would do, and both are named.
+        NeededItem ore = RecipeTree.Missing(pickaxe, _ => 0, _ => false)
+            .First(want => want.ItemID == IronOre);
+        Assert.Equal([(IronOre, 51), (LeadOre, 51)], [.. ore.Options]);
+
+        // All the lead in hand, and the ore is not wanted at all any more.
+        IReadOnlyList<NeededItem> full = RecipeTree.Missing(
+            pickaxe, item => item == LeadOre ? 51 : 0, _ => false);
+
+        Assert.DoesNotContain(full, want => want.ItemID == IronOre);
+        Assert.DoesNotContain(full, want => want.ItemID == LeadOre);
+    }
+
     /// <summary>One bench is charged once for everything made at it.</summary>
     // Six pieces of gold armour are one objective and one anvil, not six. Walked one at a
     // time the bench under each is a fresh ten wood, so the run is told to gather sixty for
