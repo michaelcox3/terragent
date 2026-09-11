@@ -285,11 +285,6 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 {
                     List<Point> cut = _cut;
                     float wet = Soak(next, cut, costs);
-                    if (float.IsPositiveInfinity(wet))
-                    {
-                        continue;
-                    }
-
                     yield return new Edge(
                         new Step(next, StepKind.Walk, cut.Count > 0 ? cut.ToArray() : null),
                         ((costs.WalkCost * (dy == 0 ? 1f : 1.5f)) + (costs.MineCost * cut.Count * doubt))
@@ -375,11 +370,6 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                         if (fits)
                         {
                             float wet = Soak(next, null, costs);
-                            if (float.IsPositiveInfinity(wet))
-                            {
-                                break;
-                            }
-
                             yield return new Edge(
                                 new Step(next, StepKind.Jump),
                                 costs.WalkCost * (up + across) * 1.5f * wet);
@@ -457,11 +447,6 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 }
 
                 float wet = Soak(next, cut, costs);
-                if (float.IsPositiveInfinity(wet))
-                {
-                    break;
-                }
-
                 yield return new Edge(
                     new Step(next, StepKind.Fall, cut.Count > 0 ? cut.ToArray() : null),
                     ((costs.WalkCost * 0.6f * down) + (costs.MineCost * cut.Count * doubt))
@@ -500,11 +485,6 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 List<Point> ahead = _cut;
 
                 float wet = Soak(next, ahead, costs);
-                if (float.IsPositiveInfinity(wet))
-                {
-                    continue;
-                }
-
                 yield return new Edge(
                     new Step(next, StepKind.Place,
                         ahead.Count > 0 ? ahead.ToArray() : null, put),
@@ -534,14 +514,11 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 // Cutting the ceiling is part of pillaring, not a reason to refuse it:
                 // requiring clear space above made a staircase the only way up.
                 float wet = Soak(next, above, costs);
-                if (!float.IsPositiveInfinity(wet))
-                {
-                    yield return new Edge(
-                        new Step(next, StepKind.Place,
-                            above.Count > 0 ? above.ToArray() : null, put),
-                        (costs.PlaceCost + (costs.WalkCost * 2f) + (costs.MineCost * above.Count * doubt))
-                        * wet);
-                }
+                yield return new Edge(
+                    new Step(next, StepKind.Place,
+                        above.Count > 0 ? above.ToArray() : null, put),
+                    (costs.PlaceCost + (costs.WalkCost * 2f) + (costs.MineCost * above.Count * doubt))
+                    * wet);
             }
         }
     }
@@ -591,13 +568,13 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     /// What a footing costs for putting the head under, as a multiplier, or infinity
     /// where the move is not allowed at all.
     /// </summary>
-    // Refused outright rather than priced dear, when the caller says so: a near wall
-    // makes the search expand every dry node before a wet one, then go in anyway.
+    // A price and never a refusal. What the price is worth saying is in Costs; what is
+    // wet is this file's.
     //
-    // The head, not the feet: liquid fills from the bottom, so wet feet are a puddle
-    // and a wet head is a swim, where a torch goes out and the terrain with it. Both
-    // columns, because half the body under is still under. Lava is cheaper because it
-    // glows; what ought to make it dear is damage, and there is none yet.
+    // The head, not the feet: liquid fills from the bottom, so wet feet are a puddle and a
+    // wet head is a swim, where a torch goes out and the terrain with it. Both columns,
+    // because half the body under is still under. Lava is cheaper because it glows; what
+    // ought to make it dear is damage, and there is none yet.
     private float Soak(Point footing, List<Point>? cut,
         Costs costs)
     {

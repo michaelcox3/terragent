@@ -9,6 +9,11 @@ namespace Terragent.Pathfinding;
 /// <param name="WaterCost">
 /// A step that puts the head under water, as a multiple of the same step dry.
 /// </param>
+// Dear, and never infinite. Refused outright it is not a price at all but a wall, and a
+// wall has no inside and no outside: a pool is wider than a footing, so a body that ends up
+// in one has every move it could make refused, and a run watched doing this stood in a pond
+// reporting nothing reachable until it was killed. Priced instead, the way out is simply
+// the cheapest route and the search finds it without being told to.
 /// <param name="LavaCost">The same for lava, which is a different problem.</param>
 /// <param name="FogCost">
 /// What breaking into a cell nobody has seen costs. Infinity where the agent has no
@@ -23,6 +28,12 @@ internal readonly record struct Costs(float WalkCost, float MineCost, float Plac
 {
     /// <summary>What liquid costs when the agent can still see in it.</summary>
     private const float Lit = 1.5f;
+
+    /// <summary>What one tile of water costs with nothing that lights it.</summary>
+    // Dear enough that no way round is longer: one wet tile against ten thousand dry ones,
+    // where the widest world is four thousand across. So it is never worth a step in, and
+    // still worth every step out.
+    private const float Blind = 10000f;
 
     /// <summary>Ticks to place one block, plus the jump that has to precede it.</summary>
     // A constant, unlike walk and mine: nothing the agent can carry makes placing faster.
@@ -52,10 +63,8 @@ internal readonly record struct Costs(float WalkCost, float MineCost, float Plac
         pickPower <= 0 ? float.PositiveInfinity : SwingsPerTile(pickPower) * (float)pickUseTime,
         PlaceTicks,
         // A torch will not light under water: the map stops revealing and the follower
-        // swings at holes it has already dug. A glowstick lights wet. With nothing that
-        // lights wet the move is refused outright; a dear price made the search five
-        // times slower and still let the agent in.
-        lightsWet ? Lit : float.PositiveInfinity,
+        // swings at holes it has already dug. A glowstick lights wet.
+        lightsWet ? Lit : Blind,
         // Lava glows, so the terrain survives it. What ought to make it dear is damage,
         // and the agent does not take any yet.
         Lit,
