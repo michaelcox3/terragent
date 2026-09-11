@@ -120,11 +120,17 @@ internal sealed class Craft(
                 { } spot)
         {
             Point floor = new(spot.At.X, spot.At.Y + 1);
+            Rectangle covers = spot.Covers;
             return new Offer(
                 new TileTarget(floor),
                 new Destination(floor)
                 {
-                    Arrived = footing => _hand.CanUseFrom(footing, spot.At.X, spot.At.Y),
+                    // In reach and out of the way, which are different questions. A body
+                    // that stops inside the cell the bench goes in has arrived at
+                    // somewhere it cannot place from, and the swing is refused in silence.
+                    Arrived = footing =>
+                        _hand.CanUseFrom(footing, spot.At.X, spot.At.Y)
+                        && !covers.Intersects(Hitbox.Fills(footing)),
                 });
         }
 
@@ -197,15 +203,6 @@ internal sealed class Craft(
         if (spot.Fill.Count > 0)
         {
             Swing(_bag.Block, spot.Fill[0]);
-            return;
-        }
-
-        // A station fills a cell the body may be standing in, and Terraria will not put a
-        // tile inside the character, so it has to rise clear of the cell before the swing.
-        Rectangle cell = new(spot.At.X * 16, spot.At.Y * 16, 16, 16);
-        if (_body.Frame.Intersects(cell))
-        {
-            _body.Leap(spot.At.Y * 16f);
             return;
         }
 

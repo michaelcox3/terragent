@@ -58,6 +58,7 @@
     <Compile Include="NavigatorTests.cs" />
     <Compile Include="CostsTests.cs" />
     <Compile Include="SpotTests.cs" />
+    <Compile Include="HitboxTests.cs" />
   </ItemGroup>
 
 </Project>

@@ -48,7 +48,7 @@ internal static class Placement
 
     /// <summary>What standing one here would take, or null when nothing would.</summary>
     public static Spot? Needs(ITerrain terrain, int tileID, Point at, int pickPower) =>
-        Spot.Read(terrain, Covers(tileID, at), pickPower);
+        Spot.Read(terrain, at, Covers(tileID, at), pickPower);
 
     /// <summary>
     /// The cheapest spot near a footing to stand one of these, or null when there is none.
@@ -63,6 +63,13 @@ internal static class Placement
     {
         Spot? cheapest = null;
 
+        // Never where the body is standing. Terraria will not put a tile inside the
+        // character, so a spot under its own feet has to be jumped clear of first, and in
+        // a tunnel three rows tall there is nowhere to rise to: the run hits its head on
+        // the ceiling and tries again for ever. A bench and a body are both two columns
+        // wide, which is why the column beside the body is still the body.
+        Rectangle standing = Hitbox.Fills(from);
+
         for (int ring = 1; ring <= Nearby; ring++)
         {
             for (int across = -ring; across <= ring; across += ring * 2)
@@ -70,7 +77,8 @@ internal static class Placement
                 foreach (int down in Rows)
                 {
                     Point at = new(from.X + across, from.Y + down);
-                    if (Needs(terrain, tileID, at, pickPower) is not { } spot
+                    if (Covers(tileID, at).Intersects(standing)
+                        || Needs(terrain, tileID, at, pickPower) is not { } spot
                         || spot.Fill.Count > blocks)
                     {
                         continue;

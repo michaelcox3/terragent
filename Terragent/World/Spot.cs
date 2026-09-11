@@ -4,6 +4,13 @@ using Microsoft.Xna.Framework;
 namespace Terragent.World;
 
 /// <summary>A place a tile could stand, and the work to make it stand there.</summary>
+/// <param name="At">The cell to aim at, which is the object's own origin.</param>
+// The origin, never the corner of what it fills. Terraria puts a multi cell object down by
+// its origin, and a furnace is three by two with its origin in the middle of the bottom
+// row: aimed at the top left corner instead it is asked for one column left and one row up
+// of where it was judged to fit, and refused in silence. A work bench is two by one with
+// its origin already in the corner, which is why that one worked and this was not noticed.
+/// <param name="Covers">The cells it fills, which is a wider box than the origin.</param>
 /// <param name="Clear">Cells in the way, which have to be broken.</param>
 /// <param name="Fill">Columns with nothing under them, which have to be floored.</param>
 // A bench needs two clear cells with something solid under each, and underground neither
@@ -13,7 +20,8 @@ namespace Terragent.World;
 // The cells rather than a count, so that what is swung at is what was judged. A caller
 // that re-derived which tile was in the way could swing at a different one from the one
 // that made the spot look workable.
-internal sealed record Spot(Point At, IReadOnlyList<Point> Clear, IReadOnlyList<Point> Fill)
+internal sealed record Spot(Point At, Rectangle Covers, IReadOnlyList<Point> Clear,
+    IReadOnlyList<Point> Fill)
 {
     /// <summary>Nothing to do but put the thing down.</summary>
     public bool Ready => Clear.Count == 0 && Fill.Count == 0;
@@ -26,9 +34,10 @@ internal sealed record Spot(Point At, IReadOnlyList<Point> Clear, IReadOnlyList<
     /// </summary>
     // Null is "no pickaxe carried will ever open this", not "not yet". Bedrock and a cell
     // the character cannot dig are the same answer to a job looking for somewhere to work.
+    /// <param name="at">The cell the game would be aimed at, which is the object's origin.</param>
     /// <param name="covers">The cells the tile would fill, from <see cref="Placement.Covers"/>.</param>
     /// <param name="pickPower">What the carried pickaxe can break.</param>
-    public static Spot? Read(ITerrain terrain, Rectangle covers, int pickPower)
+    public static Spot? Read(ITerrain terrain, Point at, Rectangle covers, int pickPower)
     {
         List<Point> clear = [];
         List<Point> fill = [];
@@ -56,7 +65,7 @@ internal sealed record Spot(Point At, IReadOnlyList<Point> Clear, IReadOnlyList<
             }
         }
 
-        return new Spot(new Point(covers.Left, covers.Top), clear, fill);
+        return new Spot(at, covers, clear, fill);
     }
 
     /// <summary>Whether this column can be given something that carries a building.</summary>

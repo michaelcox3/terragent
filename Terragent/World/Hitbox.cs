@@ -68,6 +68,12 @@ internal static class Hitbox
         return cells;
     }
 
+    /// <summary>The cells the body fills, as a block rather than one at a time.</summary>
+    // For asking whether something else wants the same space. In tiles, because what is
+    // being asked is where a tile may go, and Terraria refuses one inside the character.
+    public static Rectangle Fills(Point footing) =>
+        new(footing.X, footing.Y - Height, Width, Height);
+
     /// <summary>Whether the body at this footing covers a given column.</summary>
     public static bool Covers(Point footing, int x) =>
         x >= footing.X && x < footing.X + Width;
