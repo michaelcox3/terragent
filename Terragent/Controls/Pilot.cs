@@ -41,12 +41,6 @@ internal sealed class Pilot(
     /// <summary>How long a step may make no ground before it is not going to.</summary>
     private const double PatienceSeconds = 2.0;
 
-    /// <summary>Moves the body has proved it cannot make, so the next search goes round.</summary>
-    // The search prices what a body of this size should be able to do. A ledge it cannot
-    // actually climb looks like one it can until it stands there failing, and only the
-    // follower ever finds out.
-    private readonly HashSet<(Point From, Point To)> _refusedMoves = [];
-
     public Destination? Destination => _destination;
 
     public Progress Progress { get; private set; }
@@ -93,18 +87,14 @@ internal sealed class Pilot(
             return;
         }
 
-        if (Stalled(route.Steps[_step], at))
-        {
-            return;
-        }
-
+        Watch(route.Steps[_step], at);
         Press(route.Steps[_step], at);
     }
 
     public RouteMatch? FindRoute(IReadOnlyList<Destination> destinations)
     {
-        RouteMatch? reached =
-            _navigator.FindRoute(_body.Footing, destinations, Ability(), _refusedMoves);
+        Point from = _body.Footing;
+        RouteMatch? reached = _navigator.FindRoute(from, destinations, Ability());
         if (reached is not null)
         {
             return reached;
@@ -114,11 +104,10 @@ internal sealed class Pilot(
         // caller can say where it was trying to go; only this end knows what the body was
         // carrying, and a pickaxe too weak or nothing that lights are the two answers that
         // look identical from outside.
-        Point at = _body.Footing;
         journal.Change("unwalkable", $"nothing of {destinations.Count} from "
-            + $"({at.X}, {at.Y}): pickaxe {_bag.PickPower}, blocks {_bag.Blocks}, "
-            + $"lights {_bag.Carrying(Lights.Dark)}, wet lights {_bag.Carrying(Lights.Wet)}, "
-            + $"{_refusedMoves.Count} moves struck out");
+            + $"({from.X}, {from.Y}): pickaxe {_bag.PickPower}, blocks {_bag.Blocks}, "
+            + $"lights {_bag.Carrying(Lights.Dark)}, "
+            + $"wet lights {_bag.Carrying(Lights.Wet)}");
         return null;
     }
 
@@ -149,7 +138,7 @@ internal sealed class Pilot(
         // single form is asked whether there is a way there and answers nothing when there
         // is not; a follower wants the way as far as it goes, walks it, and asks again from
         // further along. That is how sixty tiles of tunnel get planned twenty at a time.
-        _route = _navigator.FindRoute(at, [destination], Ability(), _refusedMoves)?.Route;
+        _route = _navigator.FindRoute(at, [destination], Ability())?.Route;
 
         journal.Change("route", _route is { } route
             ? $"({at.X}, {at.Y}) to ({destination.Site.X}, {destination.Site.Y}) "
@@ -200,15 +189,18 @@ internal sealed class Pilot(
         || (step.Kind is StepKind.Jump && at.Y <= step.To.Y
             && System.Math.Abs(at.X - step.To.X) <= 1);
 
-    /// <summary>Whether this step has stopped making ground, and give up on it if so.</summary>
-    // A patience budget keyed on what is left of the step rather than on the exact footing:
-    // a body that wobbles a column either side of its takeoff is going nowhere, and keying
-    // on the footing restarts the clock at every wobble, so a ledge that will not be
-    // climbed is never given up on.
+    /// <summary>Say so when a step has stopped making ground, and nothing more.</summary>
+    // A report and never a decision. It used to strike the edge out of every later search,
+    // which read as certainty it had not earned: what it actually knows is that one step
+    // made no whole tile of progress for two seconds, and waiting out a swing, being shoved
+    // by a slime or needing one sideways nudge before a drop all look the same from here. A
+    // run watched here struck out a fall and made the same drop a second later.
     //
-    // Not a retry. The move model said this edge was makeable and the body has just shown
-    // otherwise, so the edge is struck out and the route drawn again around it.
-    private bool Stalled(Step step, Point at)
+    // Keyed on what is left of the step rather than on the exact footing, so a body
+    // wobbling a column either side of its takeoff does not restart the clock every tick
+    // and go unreported for ever. The clock restarts on each report, so a step that is
+    // truly going nowhere says so once every couple of seconds rather than every tick.
+    private void Watch(Step step, Point at)
     {
         int left = System.Math.Abs(step.To.X - at.X) + System.Math.Abs(step.To.Y - at.Y);
         if (step.To != _pushing || left < _remaining)
@@ -216,19 +208,30 @@ internal sealed class Pilot(
             _pushing = step.To;
             _remaining = left;
             _since = clock.Now;
-            return false;
+            return;
         }
 
         if (clock.Now - _since <= PatienceSeconds)
         {
-            return false;
+            return;
         }
 
-        _refusedMoves.Add((at, step.To));
-        journal.Note("refused", $"({at.X}, {at.Y}) to ({step.To.X}, {step.To.Y}) by "
-            + $"{step.Kind.ToString().ToLowerInvariant()} does not work; going round");
-        Forget();
-        return true;
+        _since = clock.Now;
+
+        // What the step still wants done, which is the difference between a plan the body
+        // cannot carry out and one it has not finished carrying out.
+        List<string> cells = [];
+        foreach (Point cell in step.Removes)
+        {
+            cells.Add($"({cell.X}, {cell.Y}) {_terrain.KindAt(cell.X, cell.Y)}");
+        }
+
+        journal.Note("stalled", $"({at.X}, {at.Y}) to ({step.To.X}, {step.To.Y}) by "
+            + $"{step.Kind.ToString().ToLowerInvariant()} has made no ground in "
+            + $"{PatienceSeconds:0} seconds, grounded {_body.Grounded}, "
+            + $"frame {_body.Frame.X},{_body.Frame.Y},{_body.Frame.Bottom}, "
+            + $"puts {(step.Puts is { } put ? $"({put.X}, {put.Y}) {_terrain.KindAt(put.X, put.Y)}" : "nothing")}, "
+            + $"breaks {(cells.Count == 0 ? "nothing" : string.Join(" ", cells))}");
     }
 
     private void Press(Step step, Point at)

@@ -79,15 +79,14 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // they cost to find; a number that only means something against somebody else's list
     // is not part of a path, and it is not a second answer either.
     public RouteMatch? FindRoute(Point from, IReadOnlyList<Destination> destinations,
-        Ability ability, ISet<(Point From, Point To)> refused) =>
+        Ability ability) =>
         FindRoute(ability.Costs, ability.PickPower, ability.Leap, from, destinations,
-            refused, ability.Blocks, null);
+            ability.Blocks, null);
 
     // One destination is a list of one, and nothing is filtered on the way back out. A
     // caller that wants only an arriving route reads Arrives and says so itself.
-    public RouteMatch? FindRoute(Point from, Destination to, Ability ability,
-        ISet<(Point From, Point To)> refused) =>
-        FindRoute(from, [to], ability, refused);
+    public RouteMatch? FindRoute(Point from, Destination to, Ability ability) =>
+        FindRoute(from, [to], ability);
 
     /// <summary>
     /// The cheapest route to whichever destination turns out to be cheapest.
@@ -100,8 +99,8 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // the two lists have to be kept in step by hand.
     /// <param name="leap">What a jump from a standstill can reach, in rows and in columns at each landing height.</param>
     private RouteMatch? FindRoute(Costs costs, int pickPower, Leap leap,
-        Point from, IReadOnlyList<Destination> destinations,
-        ISet<(Point From, Point To)>? refused, int blocks, ISet<Point>? immovable)
+        Point from, IReadOnlyList<Destination> destinations, int blocks,
+        ISet<Point>? immovable)
     {
         if (destinations.Count == 0)
         {
@@ -157,13 +156,6 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             foreach (Edge move in Moves(current, costs, pickPower, blocks, leap))
             {
                 Point next = move.Next;
-
-                // An edge the follower has proved it cannot execute: the move does not
-                // exist, rather than costing more.
-                if (refused is not null && refused.Contains((current, next)))
-                {
-                    continue;
-                }
 
                 // A landing whose only floor is a tile the body has been standing in. That
                 // tile is air, because the body was in it, so the route would be breaking
@@ -651,10 +643,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         return false;
     }
 
-    /// <summary>
-    /// What a footing costs for putting the head under, as a multiplier, or infinity
-    /// where the move is not allowed at all.
-    /// </summary>
+    /// <summary>What a footing costs for putting the head under, as a multiplier.</summary>
     // A price and never a refusal. What the price is worth saying is in Costs; what is
     // wet is this file's.
     //
@@ -662,8 +651,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // wet head is a swim, where a torch goes out and the terrain with it. Both columns,
     // because half the body under is still under. Lava is cheaper because it glows; what
     // ought to make it dear is damage, and there is none yet.
-    private float Soak(Point footing, List<Point>? cut,
-        Costs costs)
+    private float Soak(Point footing, List<Point>? cut, Costs costs)
     {
         int head = footing.Y - Hitbox.Height;
         if (_terrain.HasLava(footing.X, head) || _terrain.HasLava(footing.X + 1, head))

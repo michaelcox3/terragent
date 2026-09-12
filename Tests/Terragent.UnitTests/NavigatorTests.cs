@@ -50,8 +50,7 @@ public class NavigatorTests
         List<Step>? route = new Navigator(grid).FindRoute(
             from,
             [new Destination(to, Within: 0)],
-            new Ability(Prices, PickPower, Jump, test.Blocks),
-            new HashSet<(Point, Point)>()) is { Arrives: true } reached
+            new Ability(Prices, PickPower, Jump, test.Blocks)) is { Arrives: true } reached
             ? reached.Route.Steps as List<Step>
             : null;
         string? complaint = Judge(test, grid, route);
@@ -111,8 +110,7 @@ public class NavigatorTests
                     Arrived = node => Hitbox.Touches(node, ore),
                 },
             ],
-            new Ability(Prices, PickPower, Jump, 0),
-            new HashSet<(Point, Point)>())?.Route;
+            new Ability(Prices, PickPower, Jump, 0))?.Route;
         Assert.NotNull(route);
         Assert.True(route.Steps.Count > 0,
             "the search should not call the footing over the hole arrived");
@@ -161,8 +159,7 @@ public class NavigatorTests
         RouteMatch? reached = new Navigator(grid).FindRoute(
             new Point(4, 2),
             new Destination(new Point(4, 19), Within: 3, Budget: 3000),
-            new Ability(Prices, PickPower, Jump, 0),
-            new HashSet<(Point, Point)>());
+            new Ability(Prices, PickPower, Jump, 0));
 
         // Arrived, and not merely nearer. A partial route is non-null too, so asserting on
         // the route alone would pass for a search that gave up one step in.
@@ -206,8 +203,7 @@ public class NavigatorTests
         RouteMatch? reached = new Navigator(grid).FindRoute(
             new Point(30, 3),
             new Destination(new Point(30, 20), Within: 3, Budget: 3000),
-            new Ability(Prices, PickPower, Jump, 0),
-            new HashSet<(Point, Point)>());
+            new Ability(Prices, PickPower, Jump, 0));
 
         Assert.NotNull(reached);
         Assert.True(reached.Arrives);
@@ -226,8 +222,7 @@ public class NavigatorTests
         Point from = new(1, 2);
         Point goal = new(7, 2);
 
-        Route? loose = search.FindRoute(from, [new Destination(goal, Within: 3)], able,
-            new HashSet<(Point, Point)>())?.Route;
+        Route? loose = search.FindRoute(from, [new Destination(goal, Within: 3)], able)?.Route;
 
         Route? fussy = search.FindRoute(
             from,
@@ -237,8 +232,7 @@ public class NavigatorTests
                     Arrived = footing => footing.X >= goal.X - 1,
                 },
             ],
-            able,
-            new HashSet<(Point, Point)>())?.Route;
+            able)?.Route;
 
         Assert.NotNull(loose);
         Assert.NotNull(fussy);
@@ -261,8 +255,7 @@ public class NavigatorTests
         RouteMatch? reached = new Navigator(grid).FindRoute(
             new Point(1, 2),
             [new Destination(new Point(8, 2)), new Destination(new Point(3, 2))],
-            new Ability(Prices, PickPower, Jump, 0),
-            new HashSet<(Point, Point)>());
+            new Ability(Prices, PickPower, Jump, 0));
 
         Assert.NotNull(reached);
         Assert.Equal(1, reached.Index);
