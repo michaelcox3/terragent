@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terragent.Controls;
 using Terragent.Pathfinding;
+using Terragent.Report;
 using Terragent.World;
 
 using Terragent.Work.Jobs.Targets;
@@ -19,6 +20,7 @@ internal sealed class Gather(
     IInventory bag,
     IHand hand,
     ISites sites,
+    IJournal journal,
     int itemID,
     IReadOnlyList<int> tiles,
     int count) : IJob
@@ -56,11 +58,12 @@ internal sealed class Gather(
             ? Mining.TreeBase(_terrain, tile) ?? tile
             : tile;
 
+        Point at = tile;
+
         // Arrival is the tool's own reach box, asked of each footing the search considers.
         // A radius stands in for that box wrongly in one direction whichever number is
         // picked, and the route then ends outside swinging distance with the body on a
         // ledge above the stone pressing nothing.
-        Point at = tile;
         return new Offer(
             new TileTarget(at),
             new Destination(at)
@@ -81,6 +84,15 @@ internal sealed class Gather(
         _bag.Hold(Tool(tile));
         _hand.Aim(tile.X, tile.Y);
         _hand.Use();
+
+        // A swing that lands on nothing is silent, and so is one the game withheld. A run
+        // watched doing this stood four columns off a lead vein aiming at it for eighteen
+        // seconds, and the log said only that it had arrived. Through Change, so it is one
+        // line per state rather than one per tick.
+        journal.Change("gathering", $"{Names.Item(itemID)} at ({tile.X}, {tile.Y}): "
+            + $"holding {Names.Item(_hand.Held)}, in reach {_hand.InReach(tile.X, tile.Y)}, "
+            + $"hand blocked {_hand.Blocked}, tile there {_terrain.KindAt(tile.X, tile.Y)}, "
+            + $"pickaxe {_bag.PickPower} of {Mining.Needs(_terrain.TypeAt(tile.X, tile.Y), tile.Y)}");
     }
 
     /// <summary>Whether this is one of the tiles this job breaks.</summary>

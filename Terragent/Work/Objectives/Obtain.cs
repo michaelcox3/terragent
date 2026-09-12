@@ -293,7 +293,7 @@ internal sealed class Obtain(
             IReadOnlyList<int> tiles = Mining.Yields(itemID);
             if (tiles.Count > 0)
             {
-                jobs.Add(new Gather(terrain, bag, hand, sites, itemID, tiles, target));
+                jobs.Add(new Gather(terrain, bag, hand, sites, journal, itemID, tiles, target));
             }
 
             // Both, not one or the other. Gel comes off two dozen kinds of creature and
@@ -394,7 +394,7 @@ internal sealed class Obtain(
     private void Retrieve(List<IJob> jobs, int itemID, int tileID)
     {
         jobs.Add(new Pickup(bag, drops, itemID, 1));
-        jobs.Add(new Gather(terrain, bag, hand, sites, itemID, [tileID], 1));
+        jobs.Add(new Gather(terrain, bag, hand, sites, journal, itemID, [tileID], 1));
     }
 
     /// <summary>The tile this is made at, or zero when it takes none.</summary>
