@@ -30,24 +30,6 @@ internal sealed class Explore(
     /// <summary>How far out to look for the edge of the map, in tiles.</summary>
     private const int Far = 100;
 
-    /// <summary>How near counts as having got there.</summary>
-    // Loose, because the point is to be over there rather than on that tile, and the last
-    // few tiles of a walk into the dark reveal as much as the destination does.
-    private const int Roughly = 3;
-
-    /// <summary>How far to go at once on the way to a band, in tiles.</summary>
-    // Short, because the ground between here and the caverns is solid and a search that
-    // has to cut all of it in one route runs out of budget having dug nowhere.
-    private const int Leg = 20;
-
-    /// <summary>Footings a leg may look at before giving up on it.</summary>
-    // Generous, not thrifty. The leg already bounds how far the body goes; the budget
-    // bounds how hard the search may look, and digging is where it has to look hardest.
-    // The estimate prices what is left as walking, and a dug tile costs ten times a step,
-    // so every footing in a revealed cavern looks cheaper than the first tile of a shaft
-    // and the search works through all of them before it starts cutting.
-    private const int Reach = 20000;
-
     /// <summary>How far past a footing to check for the dark.</summary>
     private const int Look = 2;
 
@@ -58,6 +40,21 @@ internal sealed class Explore(
 
     /// <summary>The two ways out of anywhere.</summary>
     private static readonly int[] Sideways = [-1, 1];
+
+    /// <summary>Rows to try either side of the body's own, nearest first.</summary>
+    private static readonly int[] Rows = Spread();
+
+    private static int[] Spread()
+    {
+        List<int> rows = [0];
+        for (int away = 1; away <= Climb; away++)
+        {
+            rows.Add(away);
+            rows.Add(-away);
+        }
+
+        return [.. rows];
+    }
 
     // Only somewhere to be, so there is nothing to be the same attempt about.
     /// <summary>The band it walks to, which is all that decides whether two of these are one.</summary>
@@ -85,11 +82,6 @@ internal sealed class Explore(
     // make a slime appear, so hunting is a different job.
     public bool Done => _sites.Nearest(_body.Footing, tiles) is not null;
 
-    /// <summary>The furthest known ground that borders somewhere unseen.</summary>
-    // Furthest rather than nearest, and this is the whole of the job's judgement. The
-    // nearest unseen cell is usually the far side of the wall you are standing against,
-    // and walking to it reveals nothing. The far edge of what is known is where the map
-    // actually grows.
     // Arriving is the work, so there is nothing here that can stop being work.
     public bool Workable(ITarget target) => true;
 
@@ -100,37 +92,57 @@ internal sealed class Explore(
         // strip runs sideways and walking it turns up more of the same row. Everything
         // below is unknown and unknown below is never a frontier, which is how a run after
         // iron paces the surface until the sun goes down.
+        //
+        // The body's own column, so the way down is a shaft rather than a journey. The
+        // whole depth in one destination, since the search prices its own digging and cuts
+        // as much of it as its budget allows.
         if (band is { } layer && Layers.At(from.Y) != layer)
         {
-            // The body's own column, so the way down is a shaft rather than a journey, and
-            // one leg of it at a time. The search prices its own digging and will cut it.
-            Point down = new(from.X, Layers.EntryRow(layer));
-            Point leg = Destination.Toward(from, down, Leg);
-            return new Offer(
-                new TileTarget(leg),
-                new Destination(leg, Roughly, Budget: Reach));
+            Offer? shaft = Aim(from, new Point(from.X, Layers.EntryRow(layer)));
+            if (shaft is not null)
+            {
+                return shaft;
+            }
         }
 
-        for (int ring = Far; ring > 0; ring--)
+        // Nearest first, and that ordering is the whole of the job's judgement. Furthest
+        // first is a rule that undoes itself: walking toward the far edge makes it the near
+        // one, so the edge behind becomes furthest and the body turns round. A run watched
+        // doing this paced between two frontiers twenty tiles apart until it was killed.
+        //
+        // Nearest survives the body moving toward it, because moving toward the nearest
+        // thing leaves it the nearest thing. It also ends: arriving lights the dark behind
+        // it, that ground stops being a frontier, and the next one out is what gets picked.
+        // Every trip spends some of the dark, and there is only so much of it.
+        for (int ring = 1; ring <= Far; ring++)
         {
             foreach (int way in Sideways)
             {
                 // A column at that distance, not the one tile level with the body. The
                 // edge of a revealed map is roughly upright, so a sweep across it crosses
                 // it, and a sweep along the body's own row only does on flat ground.
-                for (int down = -Climb; down <= Climb; down++)
+                //
+                // Outward from the body's own row rather than down from the top of the
+                // sweep. Top down takes the shallowest frontier of the eighty it looks at,
+                // which is the one furthest from where the body is standing and the most
+                // rows of climbing to reach.
+                foreach (int down in Rows)
                 {
                     Point at = new(from.X + (ring * way), from.Y + down);
-                    if (Frontier(at, way))
+                    if (!Frontier(at, way) || !Inside(at))
                     {
-                        // The furthest frontier says which way to head, not how far to go
-                        // in one search. Underground that is a hundred tiles of solid rock
-                        // and the search comes back with nothing; walked in legs, each one
-                        // is short and arriving asks for the next.
-                        Point leg = Destination.Toward(from, at, Leg);
-                        return new Offer(
-                            new TileTarget(leg),
-                            new Destination(leg, Roughly, Budget: Reach));
+                        continue;
+                    }
+
+                    // Past the edge and into the dark, not the last lit tile before it.
+                    // Stopping on the near side leaves the cells beyond unseen, so the same
+                    // ground is still a frontier on the next tick and the run stands there
+                    // picking it again.
+                    Point dark = new(at.X + (Look * way), at.Y);
+                    Offer? beyond = Aim(from, dark);
+                    if (beyond is not null)
+                    {
+                        return beyond;
                     }
                 }
             }
@@ -142,16 +154,16 @@ internal sealed class Explore(
         // at exactly the moment it is the only thing left.
         //
         // So aim at the dark itself. A point in rock is not a place to walk to, it is a
-        // place to dig to, and the search prices its own digging: a leg of that is a short
-        // tunnel, and arriving asks for the next one.
+        // place to dig to, and the search prices its own digging: it tunnels as far as its
+        // budget reaches and arriving asks for the next stretch.
         return Digging(from);
     }
 
-    /// <summary>A leg toward the nearest cell nobody has seen, standable or not.</summary>
-    // Nearest rather than furthest, which is the opposite of the sweep above and right for
-    // the opposite reason. Walking to the near side of a wall reveals nothing, so that
-    // sweep looks past it; cutting through the wall reveals everything behind it, so this
-    // one heads straight at it.
+    /// <summary>Somewhere to head toward the nearest unseen cell, standable or not.</summary>
+    // Nearest, as the sweep above is, and for the same reason: it is the only ordering that
+    // survives the body walking toward its own answer. The difference is that this one will
+    // take ground nobody can stand on, so it cuts through a wall where the sweep looks for
+    // a way round one.
     private Offer? Digging(Point from)
     {
         for (int ring = 1; ring <= Far; ring++)
@@ -169,15 +181,16 @@ internal sealed class Explore(
                     }
 
                     Point at = new(from.X + across, from.Y + down);
-                    if (_terrain.IsKnown(at.X, at.Y))
+                    if (_terrain.IsKnown(at.X, at.Y) || !Inside(at))
                     {
                         continue;
                     }
 
-                    Point leg = Destination.Toward(from, at, Leg);
-                    return new Offer(
-                        new TileTarget(leg),
-                        new Destination(leg, Roughly, Budget: Reach));
+                    Offer? toward = Aim(from, at);
+                    if (toward is not null)
+                    {
+                        return toward;
+                    }
                 }
             }
         }
@@ -189,6 +202,32 @@ internal sealed class Explore(
     public void Work(ITarget target)
     {
     }
+
+    /// <summary>Somewhere to head, or null when the body is already there.</summary>
+    // The place itself, however far off, because how far one search may plan is not this
+    // job's business. The search runs to its budget and hands back the way to the nearest
+    // footing it proved it could stand on, the follower walks that and asks again, and the
+    // journey takes as many searches as it takes.
+    //
+    // Whether it has got there is asked of the destination just built, never of a distance
+    // worked out some other way. Arrival counts both of the columns the body straddles, so
+    // a point three columns off is outside a radius of three and inside that box: two tests
+    // that each look right then answer "worth going" and "already there" on the same tick,
+    // and the run stands still choosing the same spot sixty times a second.
+    private static Offer? Aim(Point from, Point site)
+    {
+        Destination to = new(site, Destination.Slack);
+        return to.Reached(from) ? null : new Offer(new TileTarget(site), to);
+    }
+
+    /// <summary>Whether somewhere is in the band this job was sent to, if it has one.</summary>
+    // The frontier sweep knew nothing about the band and the band rule knew nothing about
+    // the frontier, so the two of them took turns. Standing below the surface line the
+    // sweep would pick a frontier above it, the body would climb to it, and arriving there
+    // the band rule would find itself out of the band and dig a fresh shaft back down. Mine
+    // down, pillar up, mine down somewhere else, for as long as it was left running.
+    private bool Inside(Point at) =>
+        band is not { } layer || Layers.At(at.Y) == layer;
 
     /// <summary>Whether this is ground to stand on with something unseen beyond it.</summary>
     // Beyond in the direction being walked, not in any direction. Every cave wall has the

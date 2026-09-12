@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Terragent.World;
 
@@ -82,9 +83,11 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         FindRoute(ability.Costs, ability.PickPower, ability.Leap, from, destinations,
             refused, ability.Blocks, null);
 
-    public Route? FindRoute(Point from, Destination to, Ability ability,
+    // One destination is a list of one, and nothing is filtered on the way back out. A
+    // caller that wants only an arriving route reads Arrives and says so itself.
+    public RouteMatch? FindRoute(Point from, Destination to, Ability ability,
         ISet<(Point From, Point To)> refused) =>
-        FindRoute(from, [to], ability, refused)?.Route;
+        FindRoute(from, [to], ability, refused);
 
     /// <summary>
     /// The cheapest route to whichever destination turns out to be cheapest.
@@ -105,30 +108,50 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             return null;
         }
 
-        int maxNodes = 0;
-        foreach (Destination place in destinations)
-        {
-            maxNodes = Math.Max(maxNodes, place.Budget);
-        }
+        // The largest any of them asked for. One search serves the whole list and can have
+        // only one cap, and a smaller one denies a destination the budget it came with.
+        int searchBudget = destinations.Max(place => place.Budget);
 
+        // Footings seen but not yet expanded, ordered by cost so far plus estimate.
         PriorityQueue<Point, float> frontier = new();
+
+        // Which footing each one was reached from and by what move, so a route can be
+        // rebuilt backwards from any footing the search settled.
         Dictionary<Point, (Point From, Step Step)> cameFrom = [];
+
+        // The cheapest anyone has reached each footing for, so a dearer way to one already
+        // settled is dropped rather than queued again.
         Dictionary<Point, float> best = new() { [from] = 0f };
 
         // Blocks laid along the best path to each footing, so a route never plans more
         // placements than are carried.
         Dictionary<Point, int> placed = new() { [from] = 0 };
 
-        frontier.Enqueue(from, Estimate(from, destinations, costs.WalkCost));
+        // Where the route ends when no destination is reached: of every footing expanded
+        // so far, the one whose estimate to the nearest destination is smallest, and that
+        // estimate. Kept as the search runs rather than worked out at the end, since every
+        // footing is scored against the goal anyway and a second pass over them all would
+        // cost what another search costs.
+        Point closest = from;
+        float nearest = Estimate(from, destinations, costs.WalkCost);
+
+        frontier.Enqueue(from, nearest);
         int expanded = 0;
 
-        while (frontier.Count > 0 && expanded++ < maxNodes)
+        while (frontier.Count > 0 && expanded++ < searchBudget)
         {
             Point current = frontier.Dequeue();
             if (Reached(current, destinations, out int which))
             {
                 return new RouteMatch(which,
                     new Route(Rebuild(cameFrom, from, current), expanded));
+            }
+
+            float away = Estimate(current, destinations, costs.WalkCost);
+            if (away < nearest)
+            {
+                nearest = away;
+                closest = current;
             }
 
             foreach (Edge move in Moves(current, costs, pickPower, blocks, leap))
@@ -175,9 +198,46 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             }
         }
 
-        // Null is "searched and found nothing". An empty route is "already close enough
-        // that there is nothing to walk", which Rebuild returns above.
-        return null;
+        // Nothing arrived at, so hand back the way to the nearest place it proved it can
+        // stand. Exact rather than guessed: a point picked a fixed distance along the
+        // straight line to the goal can sit inside a wall, and this is ground the search
+        // has actually walked to.
+        // What the caller does with it is walk it and ask again from further along, which
+        // is how sixty tiles of tunnel get planned twenty at a time.
+        //
+        // Null when that place is where the body already is. Nothing about walking helps
+        // then, and saying so is a truer answer than a route with no steps in it.
+        if (closest == from)
+        {
+            return null;
+        }
+
+        return new RouteMatch(
+            IndexOfNearestDestination(closest, destinations, costs.WalkCost),
+            new Route(Rebuild(cameFrom, from, closest), expanded), Arrives: false);
+    }
+
+    /// <summary>Where the destination a footing is nearest to sits in the list.</summary>
+    // The match names a destination because the caller reads it back to learn whose work
+    // the route belongs to. A partial route has arrived at none of them, so it says which
+    // one it was heading for. By estimate, which is distance: the one thing a search
+    // exists to overrule, and all there is to go on once the search has failed.
+    private static int IndexOfNearestDestination(Point at,
+        IReadOnlyList<Destination> destinations, float walk)
+    {
+        int which = 0;
+        float best = float.MaxValue;
+        for (int n = 0; n < destinations.Count; n++)
+        {
+            float away = Estimate(at, destinations[n].Site, walk, destinations[n].Within);
+            if (away < best)
+            {
+                best = away;
+                which = n;
+            }
+        }
+
+        return which;
     }
 
     /// <summary>

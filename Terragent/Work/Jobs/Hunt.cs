@@ -30,24 +30,10 @@ internal sealed class Hunt(
     private readonly IBody _body = body;
 
     /// <summary>How far to pace when already in the right band, in tiles.</summary>
-    // Far enough that the spawner keeps rolling new ground and near enough that a leg of it
-    // is one route. Standing still is the one thing that never works: spawns are rolled off
+    // Far enough that the spawner keeps rolling new ground and near enough that one search
+    // plans the walk. Standing still is the one thing that never works: spawns are rolled off
     // screen and walk in, and a body that does not move sees the same empty screen.
     private const int Pace = 60;
-
-    /// <summary>How near counts as having got there.</summary>
-    private const int Roughly = 3;
-
-    /// <summary>How far to go at once on the way down to a band, in tiles.</summary>
-    private const int Leg = 20;
-
-    /// <summary>Footings a leg may look at before giving up on it.</summary>
-    // Generous, not thrifty. The leg already bounds how far the body goes; the budget
-    // bounds how hard the search may look, and digging is where it has to look hardest.
-    // The estimate prices what is left as walking, and a dug tile costs ten times a step,
-    // so every footing in a revealed cavern looks cheaper than the first tile of a shaft
-    // and the search works through all of them before it starts cutting.
-    private const int Reach = 20000;
 
     // Only somewhere to be, so there is nothing to be the same attempt about.
     public string Label => $"Hunting for {looking}";
@@ -83,16 +69,17 @@ internal sealed class Hunt(
             Point wanted = new(from.X + (Pace * Way(from)), from.Y);
             Point ground = _terrain.Under(wanted);
             return _terrain.Standable(ground)
-                ? new Offer(new TileTarget(ground), new Destination(ground, Roughly))
+                ? new Offer(new TileTarget(ground), new Destination(ground, Destination.Slack))
                 : null;
         }
 
-        // Getting to it, which is a dig, and one leg of it at a time for the same reason
-        // exploring goes in legs: one route through all of it runs out of budget having
-        // cut nowhere.
+        // Getting to it, which is a dig. The whole way down in one destination, because
+        // how far a search may plan at a time is the search's own business: it runs to its
+        // budget and hands back the way to the nearest footing it could stand on, and the
+        // follower walks that and asks again.
         Point entry = new(from.X, Layers.EntryRow(band));
-        Point leg = Destination.Toward(from, entry, Leg);
-        return new Offer(new TileTarget(leg), new Destination(leg, Roughly, Budget: Reach));
+        Destination to = new(entry, Destination.Slack);
+        return to.Reached(from) ? null : new Offer(new TileTarget(entry), to);
     }
 
     // Nothing to do on arrival. Being there is the work, and the game does the rest.

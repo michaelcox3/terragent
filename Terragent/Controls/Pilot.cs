@@ -145,7 +145,11 @@ internal sealed class Pilot(
     private void Search(Point at, Destination destination)
     {
         _step = 0;
-        _route = _navigator.FindRoute(at, destination, Ability(), _refusedMoves);
+        // The list form, which hands back a partial route as well as an arriving one. The
+        // single form is asked whether there is a way there and answers nothing when there
+        // is not; a follower wants the way as far as it goes, walks it, and asks again from
+        // further along. That is how sixty tiles of tunnel get planned twenty at a time.
+        _route = _navigator.FindRoute(at, [destination], Ability(), _refusedMoves)?.Route;
 
         journal.Change("route", _route is { } route
             ? $"({at.X}, {at.Y}) to ({destination.Site.X}, {destination.Site.Y}) "

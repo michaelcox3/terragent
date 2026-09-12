@@ -5,14 +5,24 @@ namespace Terragent.Pathfinding;
 
 /// <summary>Somewhere to get to, and what counts as being there.</summary>
 /// <param name="Site">The tile the follower is making for.</param>
-/// <param name="Within">How close counts, in tiles.</param>
+/// <param name="Within">How close counts, in tiles. Zero means standing on it.</param>
+// Zero by default, so slack is something a caller asks for rather than something it is
+// given. One tile of it looks harmless and is not: a body straddles two columns, so the
+// box already forgives a column before this widens it at all, and the two together put
+// arrival further out than a caller measuring in a straight line expects. Where a job
+// wants slack it says how much, and the four that want a shape instead say that.
 /// <param name="Budget">Footings the search may expand before giving up.</param>
 // Carries its own arrival and its own budget because they differ per caller and the
 // follower cannot know which it is serving: a tile is reached at tool range, a drop only
 // by being touched, a creature at weapon range, and a fight searches on a fraction of a
 // walk's budget.
-internal readonly record struct Destination(Point Site, int Within = 1, int Budget = 20000)
+internal readonly record struct Destination(Point Site, int Within = 0, int Budget = 20000)
 {
+    /// <summary>How near counts when the target is a direction rather than a place.</summary>
+    // Walking toward a frontier or down to a layer, where the point is to be over there and
+    // the last few tiles reveal as much as the exact one does.
+    public const int Slack = 3;
+
     /// <summary>Replaces <see cref="Within"/> when arrival is not a radius.</summary>
     public Func<Point, bool>? Arrived { get; init; }
 
@@ -22,30 +32,6 @@ internal readonly record struct Destination(Point Site, int Within = 1, int Budg
     // distance between points.
     public bool Reached(Point at) =>
         Arrived is { } arrived ? arrived(at) : Navigator.Reached(at, Site, Within);
-
-    /// <summary>A point no further than a leg away, on the way to somewhere further off.</summary>
-    // A search's cost is the ground it sweeps, not the distance it covers, so one route
-    // eighty rows down through solid rock is the shape least likely to come back with
-    // anything: it runs out of budget having dug nowhere. Walked in legs, each search is
-    // short, each one succeeds, and arriving asks for the next.
-    //
-    // Not settled onto standable ground. The agent mines and bridges, so a leg ending
-    // inside rock is a leg it will cut its way to, and the arrival radius leaves it room
-    // to stop on whatever footing it opens up.
-    public static Point Toward(Point from, Point to, int leg)
-    {
-        int across = to.X - from.X;
-        int down = to.Y - from.Y;
-        float away = MathF.Sqrt((across * across) + (down * down));
-        if (away <= leg)
-        {
-            return to;
-        }
-
-        return new Point(
-            from.X + (int)(across / away * leg),
-            from.Y + (int)(down / away * leg));
-    }
 
     /// <summary>Whether a site has drifted further than a radius allows, in tiles.</summary>
     // A circle, not a box: a site that slid three across and three down moved four and a

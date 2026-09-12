@@ -43,11 +43,17 @@ public class NavigatorTests
         // not a footing and must not be turned into one.
         Point to = Floor(grid, grid.Find(test.Goal));
 
+        // Only a route that arrives counts as one. The search also hands back the way to
+        // the nearest footing it could stand on, which is progress toward a goal and not a
+        // plan to reach it, and judging the two alike would call every walled off scenario
+        // solved.
         List<Step>? route = new Navigator(grid).FindRoute(
             from,
             [new Destination(to, Within: 0)],
             new Ability(Prices, PickPower, Jump, test.Blocks),
-            new HashSet<(Point, Point)>())?.Route.Steps as List<Step>;
+            new HashSet<(Point, Point)>()) is { Arrives: true } reached
+            ? reached.Route.Steps as List<Step>
+            : null;
         string? complaint = Judge(test, grid, route);
 
         if (complaint is null)
@@ -152,13 +158,16 @@ public class NavigatorTests
             "#########",
             "#########");
 
-        Route? route = new Navigator(grid).FindRoute(
+        RouteMatch? reached = new Navigator(grid).FindRoute(
             new Point(4, 2),
             new Destination(new Point(4, 19), Within: 3, Budget: 3000),
             new Ability(Prices, PickPower, Jump, 0),
             new HashSet<(Point, Point)>());
 
-        Assert.NotNull(route);
+        // Arrived, and not merely nearer. A partial route is non-null too, so asserting on
+        // the route alone would pass for a search that gave up one step in.
+        Assert.NotNull(reached);
+        Assert.True(reached.Arrives);
     }
 
     /// <summary>A shaft is sunk even when there is open ground to wander instead.</summary>
@@ -194,13 +203,14 @@ public class NavigatorTests
             "############################################################",
             "############################################################");
 
-        Route? route = new Navigator(grid).FindRoute(
+        RouteMatch? reached = new Navigator(grid).FindRoute(
             new Point(30, 3),
             new Destination(new Point(30, 20), Within: 3, Budget: 3000),
             new Ability(Prices, PickPower, Jump, 0),
             new HashSet<(Point, Point)>());
 
-        Assert.NotNull(route);
+        Assert.NotNull(reached);
+        Assert.True(reached.Arrives);
     }
 
     [Fact]

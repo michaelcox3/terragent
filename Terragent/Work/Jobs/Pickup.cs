@@ -53,9 +53,10 @@ internal sealed class Pickup(
         // falls, and a remembered rectangle says arrived at a patch of ground the thing has
         // rolled off, or says arrived for ever at one it was taken from.
         int index = drop.Index;
+        Point lying = new(drop.Box.Center.X / 16, drop.Box.Center.Y / 16);
         return new Offer(
             new DropTarget(_drops, index),
-            new Destination(new Point(drop.Box.Center.X / 16, drop.Box.Center.Y / 16))
+            new Destination(lying)
             {
                 Arrived = footing =>
                     _drops.At(index) is { } now && Hitbox.Touches(footing, now.Box),

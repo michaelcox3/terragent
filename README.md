@@ -11,6 +11,31 @@ The mod's panel has two switches:
 - **Driving** hands the character to the agent. Turn it off to take it back.
 - **Invulnerable** stops the character taking damage.
 
+## How it works
+
+Each tick the progression graph says what the run is still short of, and that objective
+hands back a list of jobs: gather this, craft that, fight the thing in the way.
+
+Every job that still has work names one place to go. A gather job picks the nearest ore it
+has seen, a fight job the nearest creature, a craft job a station it can use. What nearest
+means is each job's own business, and so is what counts as having arrived.
+
+All of those places go into one A\* search together, not one search each. It runs over
+footings, the two column by three row blocks of space the body can stand in, and its moves
+are the ones a player has: walk, jump, fall, bridge a gap with a block, pillar up with one.
+Every move is priced in ticks, so rock costs what it takes to mine.
+
+The first destination the search reaches is therefore the cheapest to actually get to,
+which is often not the closest in a straight line: ore behind a wall loses to ore down an
+open shaft. That one result picks the job as well as the route. The pilot then walks it by
+pressing the keys a player would, asking the destination each tick whether it is there
+yet.
+
+A place too far to plan in one go is handled while travelling rather than while choosing.
+The search is capped, so when it runs out it hands back as much of the way as it did work
+out, ending at the footing that got nearest. The body walks that stretch and the search
+runs again from further along, which is how a long tunnel gets planned a piece at a time.
+
 ## Building and running
 
 Copy `.env.example` to `.env` and set `TMODLOADER_INSTALL_PATH` to your own tModLoader
