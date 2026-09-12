@@ -165,6 +165,28 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     continue;
                 }
 
+                // A landing whose only floor is a tile the body has been standing in. That
+                // tile is air, because the body was in it, so the route would be breaking
+                // its own stairs: a run watched here drew a staircase whose third step
+                // landed on a block its first step had mined out from under it, arrived a
+                // row low, and pressed a move it could never finish. A placement makes its
+                // own floor and is asked nothing.
+                if (move.Step.Kind is not StepKind.Place
+                    && !Supported(cameFrom, current, next))
+                {
+                    continue;
+                }
+
+                // A drop needs the ground under the body gone, and the search reads that
+                // off the world as it stands. A route that bridges along a row and then
+                // plans to fall through it is reading a floor it is about to build: a run
+                // stood on the last block of its own bridge pressing a fall that could
+                // never happen, once every two seconds until it was killed.
+                if (move.Step.Kind is StepKind.Fall && Propped(cameFrom, current))
+                {
+                    continue;
+                }
+
                 // A tile the follower gave up swinging at. Without this the same route
                 // is planned and thrown away every tick. Kept out of Diggable because it
                 // is one character's experience, not a fact about the world.
@@ -565,7 +587,12 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             bool onOurOwnTower = !_terrain.Standable(at);
             _sweep.Clear();
             _sweep.Add(next);
-            if (_terrain.Buildable(put.X, put.Y)
+            // Buildable, or a cell the body is standing in, which is air by the time the
+            // block goes down whatever the terrain says now: whatever move arrived at this
+            // footing had to clear the cells the body fills, and this is one of them. Asked
+            // of the world alone, a run stopped pillaring the moment it was inside rock and
+            // dug a diagonal staircase away from its goal instead of going straight up.
+            if ((_terrain.Buildable(put.X, put.Y) || Inside(at, put))
                 && (onOurOwnTower || _terrain.Holds(put.X, at.Y, trustFog: false))
                 && Clear(at, _sweep, pickPower, blind, _cut, out float doubt))
             {
@@ -777,6 +804,97 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     doubt = Math.Max(doubt, Uncertainty(cell.X, cell.Y));
                 }
             }
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether a landing has a floor this route has not already taken away.</summary>
+    // Standable asks the world as it is. This asks whether that answer survives the route
+    // that reaches it, which is the question that matters. A route destroys floors two
+    // ways, and both count: the body clears the cells it passes through, so a tile it has
+    // stood in is gone, and every step carries the tiles it will break, which are gone too.
+    //
+    // It is also the true statement about stepping up. A body steps onto a block ahead of
+    // it and never onto one it is standing inside, nor onto one it is about to mine.
+    //
+    // Only as far back as the body is tall, and that is exact rather than a sample. A floor
+    // sits on its own footing's row, and nothing a step removes lies more than three rows
+    // above the footing it removes it from, so a step further back than that cannot reach
+    // it.
+    private bool Supported(Dictionary<Point, (Point From, Step Step)> cameFrom,
+        Point current, Point landing)
+    {
+        for (int side = 0; side < Hitbox.Width; side++)
+        {
+            Point floor = new(landing.X + side, landing.Y);
+            if (!_terrain.Holds(floor.X, floor.Y, trustFog: false))
+            {
+                continue;
+            }
+
+            if (Survives(cameFrom, current, floor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether this route has laid a block under the body, holding it up.</summary>
+    // The mirror of Survives. That one asks whether a floor the route needs is still there;
+    // this asks whether a floor the route needs gone has been put there, which is the same
+    // mistake made the other way round.
+    private static bool Propped(Dictionary<Point, (Point From, Step Step)> cameFrom,
+        Point at)
+    {
+        Point back = at;
+        for (int n = 0; n < Hitbox.Height; n++)
+        {
+            if (!cameFrom.TryGetValue(back, out (Point From, Step Step) came))
+            {
+                return false;
+            }
+
+            if (came.Step.Puts is { } put && put.Y == at.Y
+                && put.X >= at.X && put.X < at.X + Hitbox.Width)
+            {
+                return true;
+            }
+
+            back = came.From;
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether a tile is still there once the route that reaches here has run.</summary>
+    private static bool Survives(Dictionary<Point, (Point From, Step Step)> cameFrom,
+        Point current, Point floor)
+    {
+        Point back = current;
+        for (int n = 0; n < Hitbox.Height; n++)
+        {
+            if (Inside(back, floor))
+            {
+                return false;
+            }
+
+            if (!cameFrom.TryGetValue(back, out (Point From, Step Step) came))
+            {
+                return true;
+            }
+
+            foreach (Point cell in came.Step.Removes)
+            {
+                if (cell == floor)
+                {
+                    return false;
+                }
+            }
+
+            back = came.From;
         }
 
         return true;
