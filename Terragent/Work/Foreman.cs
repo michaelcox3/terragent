@@ -8,6 +8,7 @@ using Terragent.Work.Jobs;
 using Terragent.Work.Jobs.Targets;
 
 using System.Collections.Generic;
+using System.Linq;
 using Terragent.Work.Objectives;
 
 namespace Terragent.Work;
@@ -38,12 +39,6 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
 
     /// <summary>When it last went looking for something to do.</summary>
     private double _looked;
-
-    /// <summary>Scratch for one pass of choosing, so a pass is not two lists of arguments.</summary>
-    // Working room rather than state: both are emptied at the top of Choose and nothing
-    // reads them across a call.
-    private readonly List<IJob> _offering = [];
-    private readonly List<string> _nowhere = [];
 
     public IReadOnlyList<IObjective> Objectives
     {
@@ -79,7 +74,6 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
             return;
         }
 
-        // If the current job is spent, announce it and drop it.
         if (Spent())
         {
             Said();
@@ -111,7 +105,7 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         {
             // Arriving is the whole of what a travel job does, and arriving is not
             // finishing: it is done when the ore comes into view or the slime does. So it
-            // is asked for its next leg and keeps the job, rather than being dropped and
+            // asked where to go next and keeps the job, rather than being dropped and
             // made to win the choosing again. Dropped, a hunt and an explore would take
             // turns beating each other and the body would walk between them for ever.
             if (Travelling(job))
@@ -143,30 +137,62 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
     private bool Wandered(ITarget target, Destination site) =>
         target.Tile is { } now && Pathfinding.Destination.Beyond(site.Site, now, DriftTiles);
 
-    /// <summary>Take whichever job the search can actually reach soonest.</summary>
+    /// <summary>Take whichever job the search can reach most cheaply.</summary>
     // One search over every candidate rather than a straight line between them. The ore
     // behind a wall is nearer than the ore down an open shaft and further away in the only
     // sense that matters, and overruling that is what a search is for.
     //
-    // It also means an unreachable candidate is never chosen. The search simply does not
-    // settle on it, so there is nothing to fail at afterwards.
+    // A candidate no route reaches can still be chosen. The search reaches none of them,
+    // hands back the way to the footing that got nearest, and names whichever destination
+    // that footing is closest to, which is a straight line again.
     private void Choose()
     {
         _looked = clock.Now;
         Point from = _body.Footing;
 
-        // One pool out of all of them, one job per kind of work. Which objective a job
-        // came from stops mattering the moment it is offered: a crystal underfoot beats
-        // ore ten tiles away whatever either of them is for.
-        //
-        // One of each, however many objectives asked for it. What counts as the same is
-        // each job's own to say; whichever objective asked first keeps it, and they differ
-        // only in how many they wanted, so the one left over is offered again next tick.
-        //
-        // Kept apart as they are pooled. Exploring and hunting are what a run does when
-        // there is nothing it can already see to do, and they were held back from winning
-        // only by aiming far away on purpose, which is a convention a job enforces on
-        // itself and stops holding the moment one of them aims somewhere near.
+        (List<IJob> working, List<IJob> looking) = Pool();
+        Needing();
+
+        // Filled by each round, so what was on offer is the union of the rounds that ran
+        // and not of the ones that would have.
+        List<IJob> offering = [];
+        List<string> nowhere = [];
+
+        // Looking is not even asked where it would go while work is reachable. Asking costs
+        // a sweep of the frontier, sixteen thousand cells, thrown away whenever work wins.
+        int pooled = working.Count;
+        Pick? pick = Chosen(from, working, offering, nowhere);
+        if (pick is null)
+        {
+            pooled += looking.Count;
+            pick = Chosen(from, looking, offering, nowhere);
+        }
+
+        if (pick is not null)
+        {
+            Assign(pick);
+            journal.Note("chose", $"{pick.Job.Label} at "
+                + $"({pick.Destination.Site.X}, {pick.Destination.Site.Y}), "
+                + $"from {offering.Count} on offer");
+        }
+
+        Offering(pooled, offering, nowhere);
+
+        if (pick is null && pooled > 0)
+        {
+            // Said out loud, because this and an empty offer read the same in a log: both
+            // are a run that stops choosing. One is a hole in the progression and the
+            // other is a body in a pit, and they want opposite fixes.
+            journal.Change("idle", $"nothing reachable from ({from.X}, {from.Y})");
+        }
+    }
+
+    /// <summary>Every live objective's jobs, deduplicated, split into work and looking.</summary>
+    // Which objective a job came from stops mattering the moment it is offered: a crystal
+    // underfoot beats ore ten tiles away whatever either of them is for. One of each,
+    // however many objectives asked, and what counts as the same is each job's own to say.
+    private (List<IJob> Working, List<IJob> Looking) Pool()
+    {
         List<IJob> working = [];
         List<IJob> looking = [];
         HashSet<IJob> already = [];
@@ -183,38 +209,29 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
             }
         }
 
-        // The looking is not even asked where it would go while there is real work to be
-        // had. Asking costs a sweep of the frontier, sixteen thousand cells, and the
-        // answer is thrown away every time something nearer wins.
-        Needing();
-
-        _offering.Clear();
-        _nowhere.Clear();
-        if (Take(from, working))
-        {
-            Offering(working.Count);
-            return;
-        }
-
-        bool took = Take(from, looking);
-        Offering(working.Count + looking.Count);
-
-        if (!took && looking.Count + working.Count > 0)
-        {
-            // Said out loud, because this and an empty offer read the same in a log: both
-            // are a run that stops choosing. One is a hole in the progression and the
-            // other is a body in a pit, and they want opposite fixes.
-            journal.Change("idle", $"nothing reachable from ({from.X}, {from.Y})");
-        }
+        return (working, looking);
     }
 
-    /// <summary>Send a travel job on to its next leg, keeping it in hand.</summary>
+    /// <summary>Put a pick in hand and send the body to it.</summary>
+    // The one place these four are set together, so a reader of either caller can see the
+    // body being committed rather than finding it inside a condition. Onward passes the job
+    // it is already holding, which is why this sets the job rather than leaving it alone.
+    private void Assign(Pick pick)
+    {
+        Job = pick.Job;
+        Target = pick.Target;
+        Destination = pick.Destination;
+        _pilot.Follow(pick.Destination, pick.Route);
+    }
+
+    /// <summary>Send a travel job on to wherever it wants next, keeping it in hand.</summary>
     // No choosing, so nothing competes for the body while it is on its way. The job is let
     // go only when it is done or when it runs out of anywhere to go.
     private void Onward(IJob job)
     {
         Point from = _body.Footing;
-        if (job.Nearest(from) is not { } offer)
+        Offer? offer = job.Nearest(from);
+        if (offer is null)
         {
             journal.Note("dropped", $"{job.Label}: nowhere further to look from "
                 + $"({from.X}, {from.Y})");
@@ -222,16 +239,15 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
             return;
         }
 
-        if (_pilot.FindRoute([offer.Destination]) is not { } reached)
+        RouteMatch? reached = _pilot.FindRoute([offer.Destination]);
+        if (reached is null)
         {
             journal.Note("dropped", $"{job.Label}: no way on from ({from.X}, {from.Y})");
             Drop();
             return;
         }
 
-        Target = offer.Target;
-        Destination = offer.Destination;
-        _pilot.Follow(offer.Destination, reached.Route);
+        Assign(new Pick(job, offer.Target, offer.Destination, reached.Route));
 
         journal.Note("onward", $"{job.Label} to "
             + $"({offer.Destination.Site.X}, {offer.Destination.Site.Y})");
@@ -269,8 +285,14 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
     // field to say they are ordinary.
     private static bool Travelling(IJob job) => job is Explore or Hunt;
 
-    /// <summary>Take the nearest of these that the ground allows, if any of them.</summary>
-    private bool Take(Point from, IReadOnlyList<IJob> jobs)
+    /// <summary>
+    /// Whichever of these the search reaches most cheaply, or null when it reaches none.
+    /// </summary>
+    // A question, so a caller can ask without the body being committed by the asking. What
+    // it writes down is which jobs had somewhere to work and which had nowhere, since only
+    // this end knows and the caller wants to say so either way.
+    private Pick? Chosen(Point from, IReadOnlyList<IJob> jobs,
+        List<IJob> offering, List<string> nowhere)
     {
         List<(IJob Job, Offer Offer)> candidates = [];
         List<Destination> destinations = [];
@@ -287,11 +309,11 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
             Offer? offer = job.Nearest(from);
             if (offer is null)
             {
-                _nowhere.Add(job.Label);
+                nowhere.Add(job.Label);
                 continue;
             }
 
-            _offering.Add(job);
+            offering.Add(job);
             candidates.Add((job, offer));
             destinations.Add(offer.Destination);
         }
@@ -299,55 +321,38 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         // Nothing these offered can be walked to this instant. Nothing is set aside for
         // it: a slime in mid jump is unreachable for one frame and every bit as worth
         // fighting when it lands.
-        if (_pilot.FindRoute(destinations) is not { } reached)
+        RouteMatch? reached = _pilot.FindRoute(destinations);
+        if (reached is null)
         {
             // Said out loud. A multi-goal search that settles on nothing is silent
             // otherwise, since only the follower's own search writes a route line, and a
             // job that offered a site it cannot reach reads exactly like one that offered
             // no site at all.
-            List<string> sites = [];
-            foreach (Destination site in destinations)
-            {
-                sites.Add($"({site.Site.X}, {site.Site.Y})");
-            }
-
             journal.Change("unreached", $"no way from ({from.X}, {from.Y}) to any of "
-                + $"{destinations.Count}: {string.Join(" ", sites)}");
-            return false;
+                + $"{destinations.Count}: "
+                + string.Join(" ", destinations
+                    .Select(site => $"({site.Site.X}, {site.Site.Y})")));
+            return null;
         }
 
-        // By its place in the list, which is what the search reached. Matching the tile
-        // back instead cannot tell two jobs offering the same one apart.
+        // By its place in the list, which is how the search names what it settled on.
+        // Matching the tile back instead cannot tell two jobs offering the same one apart.
         (IJob taken, Offer won) = candidates[reached.Index];
-        Job = taken;
-        Target = won.Target;
-        Destination = won.Destination;
-        _pilot.Follow(won.Destination, reached.Route);
-
-        journal.Note("chose",
-            $"{taken.Label} at ({won.Destination.Site.X}, {won.Destination.Site.Y}), "
-            + $"from {candidates.Count} on offer");
-        return true;
+        return new Pick(taken, won.Target, won.Destination, reached.Route);
     }
 
     /// <summary>What was on offer and what of it had nowhere to work.</summary>
     // Through Change, so it is one line per distinct set. The count alone said seven jobs
     // were offered and two had sites, and left no way to tell which two.
-    private void Offering(int pooled)
+    private void Offering(int pooled, List<IJob> offering, List<string> nowhere)
     {
-        Offered = new List<IJob>(_offering);
+        Offered = new List<IJob>(offering);
 
-        List<string> named = [];
-        foreach (IJob job in _offering)
-        {
-            named.Add(job.Label);
-        }
-
-        journal.Change("offering", named.Count == 0
+        journal.Change("offering", offering.Count == 0
             ? $"nothing with anywhere to work, of {pooled} jobs"
-            : string.Join("; ", named)
-                + (_nowhere.Count > 0
-                    ? $"; nowhere to work for {string.Join("; ", _nowhere)}"
+            : string.Join("; ", offering.Select(job => job.Label))
+                + (nowhere.Count > 0
+                    ? $"; nowhere to work for {string.Join("; ", nowhere)}"
                     : string.Empty));
     }
 

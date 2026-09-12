@@ -28,11 +28,11 @@ internal interface IForeman
     /// <summary>What the run is working towards, empty to stand idle.</summary>
     // Several, because the progression is a graph and everything whose requirements are
     // behind it is workable at once. Their jobs go into one pool and the search takes
-    // whichever is nearest, so nothing here has to decide between them.
+    // whichever it reaches most cheaply, so nothing here has to decide between them.
     //
-    // Setting it drops the job in hand, since the job was chosen to advance what is being
-    // replaced. Setting the same list changes nothing, because the caller hands this down
-    // every tick and a job dropped every tick is a body that never arrives anywhere.
+    // Setting it leaves the job in hand alone. A front is a set, so it changes because one
+    // of several came true and the rest are still being worked, and a job whose reason has
+    // gone lets go of itself within a tick or two anyway.
     IReadOnlyList<IObjective> Objectives { get; set; }
 
     /// <summary>Everything it last had to choose from, one job per kind of work.</summary>
