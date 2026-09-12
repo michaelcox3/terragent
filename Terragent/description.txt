@@ -1,5 +1,15 @@
-A rebuild of Terragent from the ground up.
+BETA. This is a work in progress and it does not finish a playthrough yet. Expect it to
+get stuck, wander, and make poor decisions.
 
-Client side only. It changes nothing for other players.
+An agent that plays Terraria with classical AI rather than a neural network. It searches
+for routes over what the body can stand on, works out what to gather and craft from a
+progression graph, and drives the character by pressing the same keys a player would. It
+never teleports and never reads anything the player's own map has not revealed.
 
-Source and issues: https://github.com/michaelcox3/terragent
+Two switches on the panel. Driving hands your character to the agent, and turning it off
+gives it back at once. Invulnerable stops the character taking damage, which is on by
+default for now.
+
+Client side only. It changes nothing for other players and adds no items, tiles or enemies.
+
+Source, issues and progress: https://github.com/michaelcox3/terragent
