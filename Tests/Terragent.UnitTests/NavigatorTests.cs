@@ -25,8 +25,92 @@ public class NavigatorTests
     /// </summary>
     private static readonly Leap Jump = new(6, [6, 6, 5, 5, 4, 3, 2]);
 
-    /// <summary>What a scenario's moves cost. No scenario carries a glowstick.</summary>
+    /// <summary>What a scenario's moves cost. Water is dear here and passable.</summary>
     private static readonly Costs Prices = new(Walk, Mine, Place, 10f, 1.5f, 1f);
+
+    /// <summary>The same, for a run carrying nothing that lights under water.</summary>
+    // Which is what the game hands the search until a glowstick is made: dear enough that
+    // no way round is longer, since a torch goes out down there and the map stops filling
+    // in. Dear and not forbidden, so a body that ends up in a pool can still price its way
+    // out of one.
+    private static readonly Costs Dry = Prices with { WaterCost = 10000f };
+
+    /// <summary>A pond with dry ground either side of it, and rock all round.</summary>
+    // Filled to the ceiling, because the rule is about the head and not the feet: a pool
+    // the body can stand up in is a puddle and never triggers any of this.
+    private static readonly string[] Pond =
+    [
+        "##########",
+        "#..wwww..#",
+        "#..wwww..#",
+        "#..wwww..#",
+        "##########",
+    ];
+
+    /// <summary>Standing on the pond's floor, in the middle of the water.</summary>
+    private static readonly Point Under = new(4, 4);
+
+    /// <summary>Standing on the dry bank to the left of it.</summary>
+    private static readonly Point Bank = new(1, 4);
+
+    /// <summary>Water it will not go into is still water it can come out of.</summary>
+    // The pool is wider than the body, so every neighbour of a submerged footing is
+    // submerged too. Refusing all of them left a run standing in a pond with the search
+    // reporting nothing reachable at all, once a tick, until it was killed.
+    [Fact]
+    public void ARunAlreadyUnderWaterCanGetOut()
+    {
+        Grid grid = new(true, Pond);
+
+        Route? out_ = new Navigator(grid).FindRoute(
+            Under,
+            [new Destination(new Point(7, 4), Within: 0)],
+            new Ability(Dry, PickPower, Jump, 0))?.Route;
+
+        Assert.NotNull(out_);
+    }
+
+    /// <summary>A flooded channel in the floor, with room to jump across it instead.</summary>
+    // Buried, so the only ways over are the jump and the swim. The harness leaves three
+    // rows of sky above a grid and the roof is walkable, so a shallow picture is crossed
+    // over the top and proves nothing about either.
+    private static readonly string[] Channel =
+    [
+        "################",
+        "################",
+        "################",
+        "################",
+        "################",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "####wwww########",
+        "####wwww########",
+        "####wwww########",
+        "################",
+    ];
+
+    /// <summary>The dry way round wins, however much shorter the wet way is.</summary>
+    // The other half of the rule, and the half that was right all along. Without it the
+    // fix reads as "water is passable", which is what a glowstick is for.
+    [Fact]
+    public void ARunOnDryLandJumpsRatherThanSwims()
+    {
+        Grid grid = new(true, Channel);
+
+        Route? over = new Navigator(grid).FindRoute(
+            new Point(1, 8),
+            [new Destination(new Point(12, 8), Within: 0)],
+            new Ability(Dry, PickPower, Jump, 0))?.Route;
+
+        Assert.NotNull(over);
+        Assert.DoesNotContain(over.Steps, step => Submerged(grid, step.To));
+    }
+
+    /// <summary>Whether a body standing at this footing would have its head under.</summary>
+    private static bool Submerged(Grid grid, Point footing) =>
+        grid.HasWater(footing.X, footing.Y - Hitbox.Height)
+        || grid.HasWater(footing.X + 1, footing.Y - Hitbox.Height);
 
     public static IEnumerable<object[]> CaseNames => Scenarios.All.Select(test => new object[] { test.Name });
 
@@ -323,6 +407,9 @@ public class NavigatorTests
     {
         if (test.Unreachable)
         {
+            // A route that gets as near as it can is not a way there, and the search says
+            // which it is handing back. Judged on arriving rather than on emptiness,
+            // because walking up to the wall is a real and useful answer.
             return route is null ? null : $"found a route of {route.Count} steps";
         }
 
