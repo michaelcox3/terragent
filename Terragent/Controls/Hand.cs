@@ -27,6 +27,10 @@ internal sealed class Hand(Player player) : IHand
 
     public bool Blocked { get; private set; }
 
+    public Point Targeted => new(Player.tileTargetX, Player.tileTargetY);
+
+    public bool Busy => _player.itemAnimation > 0;
+
     public bool InReach(int x, int y) => Within(_player.position, 0f, x, y);
 
     // blockRange is what the game adds for placing, and it is why placing further than
@@ -106,17 +110,21 @@ internal sealed class Hand(Player player) : IHand
             return;
         }
 
-        Blocked = false;
-
         // A weapon without autoReuse fires once for as long as the button is held:
         // Terraria wants releaseUseItem true in between, as it wants releaseJump between
         // jumps. Letting go while the animation runs costs no rate, because the next use
         // could not have started until it ended.
+        //
+        // Withheld, and said so. This used to clear the flag before returning here, so a
+        // swing that was never pressed reported itself as pressed, and anything counting
+        // them was counting the wrong thing.
         if (!Holding.autoReuse && _player.itemAnimation > 0)
         {
+            Blocked = true;
             return;
         }
 
+        Blocked = false;
         _player.controlUseItem = true;
     }
 

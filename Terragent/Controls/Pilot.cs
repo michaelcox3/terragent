@@ -121,6 +121,25 @@ internal sealed class Pilot(
         _route = route;
         _step = 0;
         Progress = Progress.Idle;
+        Plan(site, route);
+    }
+
+    /// <summary>The whole route, as moves and coordinates.</summary>
+    // Handed over rather than searched for here, so without this a route chosen by whoever
+    // is holding the job never appears anywhere: a failure could be read only backwards
+    // from the one step the body happened to be pressing when it stopped.
+    private void Plan(Destination site, Route route)
+    {
+        List<string> steps = [];
+        foreach (Step step in route.Steps)
+        {
+            steps.Add($"{step.Kind.ToString().ToLowerInvariant()}({step.To.X},{step.To.Y})"
+                + (step.Puts is { } put ? $"+({put.X},{put.Y})" : string.Empty)
+                + (step.Removes.Count > 0 ? $"-{step.Removes.Count}" : string.Empty));
+        }
+
+        journal.Change("plan", $"to ({site.Site.X}, {site.Site.Y}): "
+            + string.Join(" ", steps));
     }
 
     /// <summary>Stand still and let go of wherever it was going.</summary>
@@ -139,6 +158,11 @@ internal sealed class Pilot(
         // is not; a follower wants the way as far as it goes, walks it, and asks again from
         // further along. That is how sixty tiles of tunnel get planned twenty at a time.
         _route = _navigator.FindRoute(at, [destination], Ability())?.Route;
+        if (_route is { } drawn)
+        {
+            Plan(destination, drawn);
+        }
+
 
         journal.Change("route", _route is { } route
             ? $"({at.X}, {at.Y}) to ({destination.Site.X}, {destination.Site.Y}) "
@@ -245,7 +269,14 @@ internal sealed class Pilot(
             return;
         }
 
-        if (step.Kind is StepKind.Place && step.Puts is { } put)
+        // Only while the block is still missing. Laying it is half the step and standing
+        // on it is the other half, and returning here did the first and never the second:
+        // a pillar finished itself by falling onto its own block, a bridge lays one beside
+        // the body and needs the body to walk across, so bridges never completed. They
+        // were struck out for making no ground, the search went round by rising a row, and
+        // the run climbed a staircase a tile at a time instead of crossing the gap.
+        if (step.Kind is StepKind.Place && step.Puts is { } put
+            && _terrain.KindAt(put.X, put.Y) is not TileKind.Solid)
         {
             Build(put, at);
             return;
@@ -253,8 +284,9 @@ internal sealed class Pilot(
 
         if (step.Kind is StepKind.Jump)
         {
+            journal.Change("jumping", $"({at.X}, {at.Y}) to ({step.To.X}, {step.To.Y})");
             _body.Walk(Across(step, at));
-            _body.Leap(step.To.Y * 16f);
+            _body.Leap(Apex(step, at));
             return;
         }
 
@@ -276,6 +308,30 @@ internal sealed class Pilot(
         }
 
         _body.Walk(System.Math.Sign(step.To.X - at.X));
+    }
+
+    /// <summary>The height to hold the jump to, in pixels.</summary>
+    // The landing row when the jump is a climb, so a one tile hop does not take a full
+    // leap: Terraria keeps rising about two tiles after the key is let go, and holding all
+    // the way to the row overshoots by that much.
+    //
+    // Across a gap the landing row says nothing about what the jump needs. A flat jump
+    // starts at the height it is aiming for, so the key was released after a single powered
+    // frame, against a search that prices a jump off a full ascent: the body fell short of
+    // every gap it was asked to cross.
+    //
+    // The whole arc, and not a share of it sized to the distance. The arc table says how
+    // far a full jump carries, and there is no table for a partial one: a jump asked for
+    // five columns out of six rose three rows and came down one column short. The search
+    // prices reach off a full ascent, so performing anything less is performing a different
+    // jump from the one that was planned. It overshoots a narrow gap, and that is the cost
+    // of the model rather than a fault in the following.
+    private float Apex(Step step, Point at)
+    {
+        bool sidestep = System.Math.Abs(step.To.X - _takeoff.X) <= 1;
+        return sidestep
+            ? step.To.Y * 16f
+            : (at.Y - _body.Arc().Height) * 16f;
     }
 
     /// <summary>Which way to hold during a jump, decided from where it began.</summary>
@@ -330,14 +386,25 @@ internal sealed class Pilot(
         _body.Align(at);
         _hand.Aim(tile.X, tile.Y);
         _hand.Use();
+        journal.Change("mining", $"({tile.X}, {tile.Y}) from ({at.X}, {at.Y}), "
+            + $"{_terrain.KindAt(tile.X, tile.Y)}, "
+            + $"seen {_terrain.IsKnown(tile.X, tile.Y)}, "
+            + $"withheld {_hand.Blocked}");
     }
 
+    /// <summary>Lay the block this step stands on, which the caller has found missing.</summary>
+    // Whether it is there yet is the caller's question, because the answer decides between
+    // two different things to do rather than between doing this and doing nothing.
     private void Build(Point put, Point at)
     {
-        // Finished by the tile existing rather than by a swing being thrown. Terraria
-        // refuses a placement in silence, and the follower cannot tell that from a swing
-        // still in flight.
-        if (_terrain.KindAt(put.X, put.Y) is TileKind.Solid)
+        // Wait the last swing out before spending a jump on this. Terraria will not start a
+        // use while one is running, and the mining that clears the way for a pillar runs on
+        // for about as long as the whole arc: the body rose, held the button through the
+        // few frames it was clear, and came down with the block still unplaced. Four arcs
+        // went that way for every block laid, and the one that worked was the swing landing
+        // inside the window by luck. Taking the tick is what ends the animation, since
+        // nothing presses use while this returns.
+        if (_hand.Busy)
         {
             return;
         }
@@ -350,15 +417,34 @@ internal sealed class Pilot(
 
         _bag.Hold(_bag.Block);
 
+        // Aimed before the rise, not after it. Terraria refuses a swing aimed where the
+        // cursor was not on the previous frame, so a cursor moved only once the body is
+        // clear wastes the first tick of the window it waited for: the body drops back, the
+        // jump is spent for nothing and it jumps again. A run watched here jumped two or
+        // three times for every block it laid.
+        _hand.Aim(put.X, put.Y);
+
         // A pillar puts its block in a cell the body is filling, and the game will not
-        // place a tile inside the character, so it has to rise clear of the cell first.
-        // A bridge lays into the floor row beside the body, where the feet already are,
-        // and needs no jump: the difference falls out of where the feet are in pixels.
-        // A row above the floor is a pillar; the floor row itself is a bridge, and the
-        // pixel test alone cannot tell them apart when the feet sit exactly on the line.
+        // place a tile inside the character, so it has to rise clear of the cell first. A
+        // bridge lays into the floor row beside the body and needs no jump.
+        //
+        // Whether the body is in the way, not whether the target row is above the footing
+        // row. The footing rises with the body, so mid jump a pillar started reading as a
+        // bridge: the rise was skipped, the swing went out from inside the cell, and
+        // Terraria refused it without a word. Four whole arcs went that way for every block
+        // laid.
         float top = put.Y * 16f;
-        if (put.Y < at.Y && _body.Frame.Bottom > top)
+        Rectangle cell = new(put.X * 16, put.Y * 16, 16, 16);
+        if (_body.Frame.Intersects(cell))
         {
+            // One line per jump rather than per tick, so the count is readable. A block
+            // that takes three arcs to lay says so, and a deduplicated line cannot.
+            if (_body.Grounded)
+            {
+                journal.Note("rising", $"for ({put.X}, {put.Y}) from ({at.X}, {at.Y}), "
+                    + $"bottom {_body.Frame.Bottom} needs {top:0}");
+            }
+
             _body.Align(at);
             _body.Leap(top);
             return;
@@ -370,8 +456,17 @@ internal sealed class Pilot(
             return;
         }
 
-        _hand.Aim(put.X, put.Y);
+        // Every block this lays, once each. A route that spends blocks where a dig would do
+        // reaches the goal and reads as a pass, so the only way to see it is to say so.
         _hand.Use();
+
+        // Every attempt, not every distinct one. Whether a block took one swing or five is
+        // the whole question about a pillar, and a line that only speaks when its text
+        // changes cannot answer it.
+        journal.Note("laying", $"({put.X}, {put.Y}) from ({at.X}, {at.Y}), "
+            + $"bottom {_body.Frame.Bottom}, holding {Names.Item(_hand.Held)}, "
+            + $"withheld {_hand.Blocked}, still swinging {_hand.Busy}, "
+            + $"game aims at ({_hand.Targeted.X}, {_hand.Targeted.Y})");
     }
 
     private void Forget()

@@ -17,6 +17,18 @@ internal interface IHand
     // no pickaxe to fetch if none was ever picked up.
     int Held { get; }
 
+    /// <summary>Whether a swing is still running, which is what refuses the next one.</summary>
+    // Terraria will not start a use while the last one is still animating, however hard the
+    // button is held. Switching what is in the hand does not clear it either, so a pickaxe
+    // swing runs on into whatever the next thing to do is.
+    bool Busy { get; }
+
+    /// <summary>The tile the game itself believes is under the cursor.</summary>
+    // Not the one Aim asked for. The game recomputes its own target after this hook runs
+    // and from a camera that has moved since, so the two can differ, and what it does is
+    // done to this one.
+    Point Targeted { get; }
+
     /// <summary>Whether the last <see cref="Use"/> went down or was withheld.</summary>
     // Terraria refuses a swing on the frame the cursor is over the interface, and this
     // refuses one when the game's own target has drifted off the aimed tile, which
