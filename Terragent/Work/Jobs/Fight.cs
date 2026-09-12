@@ -90,7 +90,7 @@ internal sealed class Fight(
         int index = creature.Index;
         return new Offer(
             new CreatureTarget(_creatures, index),
-            new Destination(Tile(creature.Middle), Within: 1, Budget: Patience)
+            new Destination(Tile(creature.Middle), Budget: Patience)
             {
                 Arrived = footing => _creatures.At(index) is { } now
                     && _hand.CanHitFrom(footing, now.Middle, _bag.Weapon,
