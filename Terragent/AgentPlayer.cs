@@ -22,6 +22,11 @@ public sealed class AgentPlayer : ModPlayer
 
     private IAgent? _agent;
 
+#if TESTING
+    /// <summary>The scenario arena, while one is being walked.</summary>
+    private Tests.Arena? _arena;
+#endif
+
     /// <summary>The agent this character is running, or null before it is built.</summary>
     // For the panel, which cannot be handed anything: tModLoader constructs a ModSystem
     // itself, so it reaches the run through the player that owns it.
@@ -80,20 +85,37 @@ public sealed class AgentPlayer : ModPlayer
             return;
         }
 
-        // The keyboard is read into these before this hook runs, so anything the person at
-        // the keyboard is holding would be added to whatever the agent presses: they steer
-        // together and neither gets where it was going. While it is driving, it drives.
+#if TESTING
+        // The scenario arena, which steers the body itself and leaves the agent switched
+        // off. Here because this is where a key held counts for this frame.
+        if ((_arena ?? Runner.Arena) is { Running: true } arena)
+        {
+            Loose();
+            arena.Tick();
+            return;
+        }
+#endif
+
         if (_agent is { Driving: true })
         {
-            Player.controlLeft = false;
-            Player.controlRight = false;
-            Player.controlJump = false;
-            Player.controlDown = false;
-            Player.controlUp = false;
-            Player.controlUseItem = false;
+            Loose();
         }
 
         _agent?.Tick();
+    }
+
+    /// <summary>Let go of every key the person at the keyboard might be holding.</summary>
+    // The keyboard is read into these before this hook runs, so anything a person is
+    // holding would be added to whatever the agent presses: they steer together and
+    // neither gets where it was going. While something else is driving, it drives.
+    private void Loose()
+    {
+        Player.controlLeft = false;
+        Player.controlRight = false;
+        Player.controlJump = false;
+        Player.controlDown = false;
+        Player.controlUp = false;
+        Player.controlUseItem = false;
     }
 
     public override void ProcessTriggers(TriggersSet triggers)
@@ -112,6 +134,13 @@ public sealed class AgentPlayer : ModPlayer
                 Invulnerable ? Color.LightGreen : Color.LightGray);
         }
 
+#if TESTING
+        if (TerragentMod.RunScenarios?.JustPressed == true)
+        {
+            Walk(agent);
+        }
+#endif
+
         if (TerragentMod.ToggleDriving?.JustPressed != true)
         {
             return;
@@ -124,6 +153,27 @@ public sealed class AgentPlayer : ModPlayer
             agent.Driving ? "[Agent] taking the controls" : "[Agent] you have them back",
             agent.Driving ? Color.LightGreen : Color.LightGray);
     }
+
+#if TESTING
+    /// <summary>Start walking the scenarios, or stop part way through.</summary>
+    // Driving goes off for the duration. The arena steers the body itself, and a foreman
+    // choosing its own work at the same time is a second thing pressing the keys.
+    private void Walk(IAgent agent)
+    {
+        if (_arena is { Running: true } walking)
+        {
+            walking.Stop("stopped");
+            Main.NewText("[Agent] scenarios stopped", Color.LightGray);
+            return;
+        }
+
+        agent.Driving = false;
+        Invulnerable = true;
+        _arena = new Tests.Arena(agent.Foreman.Pilot, agent.Terrain, new Journal(Mod));
+        _arena.Start(string.Empty);
+        Main.NewText("[Agent] walking the scenarios", Color.LightGreen);
+    }
+#endif
 
     /// <summary>Refuse all damage while the switch is on.</summary>
     public override bool ImmuneTo(PlayerDeathReason damageSource, int cooldownCounter,

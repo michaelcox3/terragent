@@ -43,6 +43,17 @@ public sealed class Runner : ModSystem
 
     private static bool _playing;
 
+    /// <summary>Whether this run walks the scenarios rather than playing the progression.</summary>
+    private static bool _walking;
+
+    /// <summary>What a scenario's name must contain to be walked, or empty for all of them.</summary>
+    private static string _only = "";
+
+    /// <summary>The arena in progress, for the hook that presses keys.</summary>
+    // Ticked from SetControls and not from this file's own hook, which runs as the frame is
+    // drawn: a key held then is held after the game has already read what was pressed.
+    internal static Tests.Arena? Arena { get; set; }
+
     private static Task? _generating;
 
     private static DateTime _until;
@@ -68,10 +79,16 @@ public sealed class Runner : ModSystem
         }
 
         _mod = Mod;
-        _seconds = double.TryParse(File.ReadAllText(FlagPath).Trim(), out double asked)
-            ? asked
-            : DriveFor;
+        string flag = File.ReadAllText(FlagPath).Trim();
         File.Delete(FlagPath);
+
+        // Walking the scenarios needs a world and a character, and any will do, so it takes
+        // whichever are already on disk rather than making fresh ones. Making one has never
+        // worked unattended on this machine: every log in the folder stops at the new world
+        // being saved and the game goes no further.
+        _walking = flag.StartsWith("arena", StringComparison.OrdinalIgnoreCase);
+        _only = _walking ? flag[5..].Trim() : string.Empty;
+        _seconds = double.TryParse(flag, out double asked) ? asked : DriveFor;
         _phase = Phase.Entering;
         Say("asked", $"driving for {_seconds} seconds");
     }
@@ -119,6 +136,29 @@ public sealed class Runner : ModSystem
         {
             case Phase.Entering when Main.gameMenu:
                 Enter(now);
+                return;
+
+            case Phase.Entering when _walking:
+                if (Driver?.Agent is not { } walker)
+                {
+                    return;
+                }
+
+                walker.Driving = false;
+                Arena = new Tests.Arena(walker.Foreman.Pilot, walker.Terrain,
+                    new Report.Journal(_mod!));
+                Arena.Start(_only);
+                _phase = Phase.Driving;
+                Say("walking", $"as {Main.LocalPlayer.name} in {Main.worldName}");
+                return;
+
+            case Phase.Driving when Arena is { Running: true }:
+                return;
+
+            case Phase.Driving when Arena is not null:
+                Say("done", "the scenarios are walked");
+                _phase = Phase.Leaving;
+                Main.instance.Exit();
                 return;
 
             case Phase.Entering:
@@ -170,6 +210,12 @@ public sealed class Runner : ModSystem
                 Environment.Exit(3);
             }
 
+            return;
+        }
+
+        if (_walking)
+        {
+            Open();
             return;
         }
 
@@ -229,6 +275,33 @@ public sealed class Runner : ModSystem
         }
 
         Say("entering", $"{_name} into {_name}");
+        _playing = true;
+        _frames = 0;
+        WorldGen.playWorld();
+    }
+
+    /// <summary>Go into whatever world and character are already saved.</summary>
+    // The newest of each, because the arena builds its own ground in the sky and does not
+    // care what is underneath it. What it needs is a loaded world, which making one has
+    // never managed to hand over unattended.
+    private static void Open()
+    {
+        Main.LoadWorlds();
+        WorldFileData? world = Main.WorldList.FirstOrDefault();
+        Main.LoadPlayers();
+        PlayerFileData? them = Main.PlayerList.FirstOrDefault();
+        if (world is null || them is null)
+        {
+            Say("failed", "no saved world and character to walk the scenarios in");
+            Environment.Exit(3);
+            return;
+        }
+
+        world.SetAsActive();
+        them.SetAsActive();
+        _name = them.Name;
+
+        Say("entering", $"{them.Name} into {world.Name}");
         _playing = true;
         _frames = 0;
         WorldGen.playWorld();

@@ -14,7 +14,8 @@ rather than left up: it holds the mod's file lock and blocks the next build.
 #>
 [CmdletBinding()]
 param(
-    [int]$Seconds = 120,
+    # Seconds to drive, or "arena" to walk the pathfinding scenarios in a saved world.
+    [string]$Flag = "120",
     [string]$Install = $(
         $envFile = Join-Path $PSScriptRoot "..\..\.env"
         $fromFile = if (Test-Path $envFile) {
@@ -67,10 +68,18 @@ public static class Window
 
 $logs = Join-Path $Install "tModLoader-Logs"
 $flagPath = Join-Path $logs "terragent-run.flag"
-$clientLog = Join-Path $logs "client.log"
+# Whichever client log this run is actually writing, found each time rather than named.
+# tModLoader falls back to client2.log, client3.log and so on when the first is held open,
+# so a fixed name goes stale: the watcher then cannot see the no audio warning, never
+# clicks Continue, and every run dies at that panel with an empty log to show for it.
+function Get-ClientLog {
+    Get-ChildItem -Path $logs -Filter "client*.log" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+}
 New-Item -ItemType Directory -Force $logs | Out-Null
-Set-Content -Path $flagPath -Value "$Seconds" -NoNewline -Encoding ascii
-Write-Host "flag: drive $Seconds seconds"
+Set-Content -Path $flagPath -Value "$Flag" -NoNewline -Encoding ascii
+Write-Host "flag: $Flag"
 
 $launched = Get-Date
 Start-Process -FilePath (Join-Path $Install "start-tModLoader.bat") -WorkingDirectory $Install -WindowStyle Minimized
@@ -104,7 +113,8 @@ while ((Get-Date) -lt $deadline) {
 
     if (Test-Path $flagPath) {
         $recent = @()
-        if ((Test-Path $clientLog) -and (Get-Item $clientLog).LastWriteTime -ge $launched) {
+        $clientLog = Get-ClientLog
+        if ($clientLog -and (Get-Item $clientLog).LastWriteTime -ge $launched) {
             $recent = Get-Content $clientLog -ErrorAction SilentlyContinue
         }
         $noAudio = $recent | Where-Object { $_ -like "*No audio hardware found*" }

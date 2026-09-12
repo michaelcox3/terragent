@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Terragent.UnitTests;
+namespace Terragent.Tests;
 
 /// <summary>The kinds of move a route can be made of.</summary>
 [System.Flags]
@@ -881,6 +881,25 @@ internal static class Scenarios
             ".........",
         ]) { Seconds = 25, Border = false },
 
+
+        // A gap crossed with a lid overhead. A body fills three rows above its footing, so
+        // the rows between its head and the lid are all the rise it has: two here, against
+        // an arc that reaches six columns in open sky. The jump is four, which two rows of
+        // rise carries. Every other jump in this suite has open sky above it, and most of a
+        // cave does not.
+        new("jump a gap under a low ceiling",
+            Walk: true, Jump: true, Mine: false, Build: false,
+            "the player must cross a gap with rock close overhead",
+        [
+            "##############",
+            "#............#",
+            "#............#",
+            "#............#",
+            "#............#",
+            "#@.........G.#",
+            "#####...######",
+            "..............",
+        ]) { Seconds = 25, Border = false },
 
         new("build horizontally to do a jump",
             Walk: true, Jump: true, Mine: false, Build: true,

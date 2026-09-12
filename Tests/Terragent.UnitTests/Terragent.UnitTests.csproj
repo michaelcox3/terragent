@@ -51,8 +51,8 @@
     <Compile Include="..\..\Terragent\Pathfinding\Edge.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Destination.cs" />
 
+    <Compile Include="..\..\Terragent\Tests\Scenarios.cs" />
     <Compile Include="GlobalUsings.cs" />
-    <Compile Include="Scenarios.cs" />
     <Compile Include="Grid.cs" />
     <Compile Include="RecipeTreeTests.cs" />
     <Compile Include="NavigatorTests.cs" />

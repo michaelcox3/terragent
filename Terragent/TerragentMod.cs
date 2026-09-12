@@ -21,10 +21,20 @@ public sealed class TerragentMod : Mod
     // it on has to say so.
     public static ModKeybind? ToggleInvulnerable { get; private set; }
 
+    /// <summary>The key that walks the pathfinding scenarios in whatever world is open.</summary>
+    // A keybind rather than a flag file, because the flag file asks for a world to be made
+    // and gone into unattended, and that has never once worked on this machine: every log
+    // in the folder stops at the world being saved. The arena needs a loaded world and a
+    // patch of sky, both of which a person who is already playing has.
+    public static ModKeybind? RunScenarios { get; private set; }
+
     public override void Load()
     {
         ToggleDriving = KeybindLoader.RegisterKeybind(this, "ToggleDriving", "K");
         ToggleInvulnerable = KeybindLoader.RegisterKeybind(this, "ToggleInvulnerable", "J");
+#if TESTING
+        RunScenarios = KeybindLoader.RegisterKeybind(this, "RunScenarios", "L");
+#endif
 
         // Read once, here, so a typo in the file throws with the name in it at load rather
         // than becoming a zero somebody chases through a run.
@@ -36,5 +46,6 @@ public sealed class TerragentMod : Mod
     {
         ToggleDriving = null;
         ToggleInvulnerable = null;
+        RunScenarios = null;
     }
 }
