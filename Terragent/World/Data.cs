@@ -20,13 +20,29 @@ internal static class Data
         AllowTrailingCommas = true,
     };
 
+    /// <summary>Files already taken out of the mod, so each is read from it once.</summary>
+    // A load once table rather than state: the contents cannot change while the game is
+    // running, and what it saves is not time but a fault. tModLoader serves the files in a
+    // .tmod from one stream, and reading a second one while the first is open throws.
+    // Reading these happens inside building a character, which the game does once per save
+    // on disk, so six saved characters meant six overlapping reads and the run died at the
+    // menu before it had entered anything.
+    private static readonly Dictionary<string, JsonElement> Read_ = [];
+
     /// <summary>Parse a file packed into the mod.</summary>
     public static JsonElement Read(Mod mod, string path)
     {
+        if (Read_.TryGetValue(path, out JsonElement known))
+        {
+            return known;
+        }
+
         byte[] bytes = mod.GetFileBytes(path)
             ?? throw new InvalidOperationException($"{path} is not in the mod");
 
-        return JsonDocument.Parse(bytes, Lenient).RootElement.Clone();
+        JsonElement root = JsonDocument.Parse(bytes, Lenient).RootElement.Clone();
+        Read_[path] = root;
+        return root;
     }
 
     /// <summary>An item id from its <see cref="ItemID"/> name.</summary>
