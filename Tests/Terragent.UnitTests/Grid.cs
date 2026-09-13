@@ -122,6 +122,9 @@ internal sealed class Grid : ITerrain
     // stood in.
     public bool Buildable(int x, int y) => At(x, y) is '.' or '@' or 'G' or 'w';
 
+    /// <summary>A plant: walked through, and in the way of a block. 'v' for a sunflower.</summary>
+    public bool Clutter(int x, int y) => At(x, y) == 'v';
+
     public bool IsKnown(int x, int y) => KindAt(x, y) is not TileKind.Unknown;
 
     /// <summary>Lit wherever the picture shows something, and dark where it does not.</summary>
@@ -152,9 +155,30 @@ internal sealed class Grid : ITerrain
             return false;
         }
 
+        // Fog is not diggable, as Terrain has it: a cell nobody has seen cannot be
+        // priced, and a swing at unseen air never finishes.
         if (KindAt(x, y) is TileKind.Unknown)
         {
+            return false;
+        }
+
+        // A plant goes to any swing, however weak the pickaxe.
+        if (Clutter(x, y))
+        {
             return true;
+        }
+
+        // Nothing broken blind, as Terrain has it: a cell with an unseen neighbour might
+        // have water behind it, and breaking it is the only way to find out.
+        for (int across = -1; across <= 1; across++)
+        {
+            for (int down = -1; down <= 1; down++)
+            {
+                if (KindAt(x + across, y + down) is TileKind.Unknown)
+                {
+                    return false;
+                }
+            }
         }
 
         // Half blocks and slopes are rock that happens to be shaped, so they break;

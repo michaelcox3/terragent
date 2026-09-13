@@ -58,26 +58,88 @@ internal sealed class Terrain : ITerrain
         TileKind kind = KindAt(x, y);
         if (kind is TileKind.Unknown)
         {
-            // Worth the swing on the chance it is air. A cell nobody has seen proves
-            // nothing by refusing to break, and the alternative is a search that treats
-            // every unlit cell as wall.
+            // Never. A cell nobody has seen cannot be priced, cannot be watched, and
+            // cannot be finished: a swing at unseen air breaks nothing and reveals
+            // nothing, so the follower waits for it to go and waits for ever. A run cut
+            // fifty rows into fog that turned out to be a pool, drowned its own light and
+            // stood swinging at water it could not see.
+            //
+            // Tunnelling still works, because breaking the face in front of you lights the
+            // next one and the map takes it. So a plan reaches the edge of what is known,
+            // and the next plan starts from there knowing one cell more. Shorter routes
+            // that are all verified, rather than one long one that might be anything.
+            return false;
+        }
+
+        // A plant goes to any swing, whatever is in hand and however weak it is.
+        if (Clutter(x, y))
+        {
             return true;
         }
 
         // A slab has to break too, or every descent through smoothed ground is sealed.
         bool rock = kind is TileKind.Solid or TileKind.Slab;
 
+        // Nothing broken blind. A cell with an unseen neighbour might have water behind it,
+        // and there is no way to find out but to break it, at which point the body is
+        // standing in it: a run dug two tiles a row through known rock, came through the
+        // last one into a pool, and bobbed there with a torch that does not light wet.
+        //
+        // Light reaches into stone, so this is a rule about seeing rather than a ban on
+        // digging. Beside a lit tunnel the map holds seven tiles of rock; in the dark at the
+        // bottom of a shaft it holds one. So the way on is to light the ground and then cut
+        // it, which is what it is for.
         return rock
+            && Surrounded(x, y)
             && pickPower >= Mining.Needs(TypeAt(x, y), y)
             && CanKill(x, y)
             && !SupportsStation(x, y);
     }
 
+    /// <summary>Whether every cell touching this one is on the map.</summary>
+    private bool Surrounded(int x, int y)
+    {
+        for (int across = -1; across <= 1; across++)
+        {
+            for (int down = -1; down <= 1; down++)
+            {
+                if (!IsKnown(x + across, y + down))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     // Fog is not buildable either: a plan through unseen cells replans every step.
     public bool Buildable(int x, int y) => IsKnown(x, y) && TypeAt(x, y) == Empty;
 
+    // tileCut is Terraria's own list of what a swing destroys: grass, plants, vines,
+    // cobwebs. Not "anything that is not solid", which was the first reading and is far
+    // too wide. A tree trunk is not solid either, and a tree wants an axe, so that reading
+    // made every tree diggable with a pickaxe and a run stood swinging at one.
+    public bool Clutter(int x, int y) =>
+        IsKnown(x, y)
+        && TypeAt(x, y) != Empty
+        && Main.tileCut[TypeAt(x, y)]
+        && CanKill(x, y)
+        && !SupportsStation(x, y);
+
     /// <summary>Whether this cell holds water, which for this purpose includes honey.</summary>
     // Honey counts as water: both put a torch out and stop the map revealing.
+    /// <summary>Whether this tile falls once what is under it goes.</summary>
+    // The game keeps a table for the sand family. Silt, slush and desert fossil fall the
+    // same way and are not in it, so they are named.
+    public bool Falls(int x, int y)
+    {
+        int type = TypeAt(x, y);
+        return type != Empty
+            && (Main.tileSand[type]
+                || type is TileID.Silt or TileID.Slush or TileID.DesertFossil);
+    }
+
     public bool HasWater(int x, int y) =>
         IsKnown(x, y) && Main.tile[x, y].LiquidAmount > 0
         && Main.tile[x, y].LiquidType != LiquidID.Lava;

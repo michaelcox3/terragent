@@ -510,12 +510,13 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     break;
                 }
 
-                // Fog counts as ground here. The pessimistic reading: unseen
-                // rock will stop the fall, and if it turns out to be a cavern
-                // the character keeps going and the follower replans from
-                // where it lands.
+                // Seen ground only. A landing nobody has looked at is a guess about
+                // where the body stops, and a drop onto one is how a run ended up in a
+                // pool it could not see, with no light that works under water, nothing
+                // left to dig and nowhere to go. Falling in is easy and getting out is
+                // not, so the fall is the place to be careful.
                 Point next = new(column.X, at.Y + down);
-                if (!_terrain.Standable(next, trustFog: true))
+                if (!_terrain.Standable(next, trustFog: false))
                 {
                     continue;
                 }
@@ -548,7 +549,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 bool onOurOwnBridge = !_terrain.Standable(at);
                 _sweep.Clear();
                 _sweep.Add(next);
-                if (!_terrain.Buildable(put.X, put.Y)
+                if (!(_terrain.Buildable(put.X, put.Y) || _terrain.Clutter(put.X, put.Y))
                     || !(onOurOwnBridge
                          || _terrain.Holds(put.X - dx, put.Y, trustFog: false))
                     || !Clear(at, _sweep, pickPower, blind, _cut, out float doubt))
@@ -557,6 +558,15 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 }
 
                 List<Point> ahead = _cut;
+
+                // The plant standing where the block goes. Nothing else books it: it does
+                // not hold the body up and does not block it, so every move walks through
+                // it, and the placement is then refused without a word.
+                if (_terrain.Clutter(put.X, put.Y))
+                {
+                    ahead.Add(put);
+                }
+
 
                 float wet = Soak(next, ahead, costs);
                 yield return new Edge(
@@ -584,11 +594,18 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             // footing had to clear the cells the body fills, and this is one of them. Asked
             // of the world alone, a run stopped pillaring the moment it was inside rock and
             // dug a diagonal staircase away from its goal instead of going straight up.
-            if ((_terrain.Buildable(put.X, put.Y) || Inside(at, put))
+            if ((_terrain.Buildable(put.X, put.Y)
+                 || _terrain.Clutter(put.X, put.Y)
+                 || (Inside(at, put)
+                     && _terrain.KindAt(put.X, put.Y) is TileKind.Solid or TileKind.Slab))
                 && (onOurOwnTower || _terrain.Holds(put.X, at.Y, trustFog: false))
                 && Clear(at, _sweep, pickPower, blind, _cut, out float doubt))
             {
                 List<Point> above = _cut;
+                if (_terrain.Clutter(put.X, put.Y))
+                {
+                    above.Add(put);
+                }
 
                 // Cutting the ceiling is part of pillaring, not a reason to refuse it:
                 // requiring clear space above made a staircase the only way up.

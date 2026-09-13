@@ -29,6 +29,17 @@ internal interface ITerrain
 
     bool Buildable(int x, int y);
 
+    /// <summary>
+    /// Whether a tile is here that neither holds the body up nor blocks it, but has to go
+    /// before anything can be placed.
+    /// </summary>
+    // Grass, plants, torches, cobwebs. The body walks through them, so no move ever books
+    // one to be broken, and the cell still reads as somewhere a block could go. Terraria
+    // then refuses the placement in silence: a run pillared into a sunflower and laid wood
+    // at it four times a second until it was killed. They break to any swing, so this is
+    // about noticing them rather than about paying for them.
+    bool Clutter(int x, int y);
+
     bool HasWater(int x, int y);
 
     bool HasLava(int x, int y);
