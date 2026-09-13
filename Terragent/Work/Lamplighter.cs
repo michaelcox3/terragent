@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria.ID;
 using Terragent.Controls;
+using Terragent.Pathfinding;
 using Terragent.Report;
 using Terragent.World;
 
@@ -18,6 +20,7 @@ internal sealed class Lamplighter(
     IHand hand,
     ISites sites,
     IBody body,
+    IPilot pilot,
     IJournal journal) : ILamplighter
 {
     private readonly ITerrain _terrain = terrain;
@@ -25,6 +28,7 @@ internal sealed class Lamplighter(
     private readonly IHand _hand = hand;
     private readonly ISites _sites = sites;
     private readonly IBody _body = body;
+    private readonly IPilot _pilot = pilot;
 
     /// <summary>How far apart to keep them, in tiles.</summary>
     // A rule about where the tiles are, so it holds from the moment the swing lands rather
@@ -39,6 +43,11 @@ internal sealed class Lamplighter(
     private const int Range = Apart;
 
     /// <summary>Dark, with nothing in hand to see by: below this the map stops filling in.</summary>
+    /// <summary>How many cells out from the body the ground has to be on the map.</summary>
+    // Two. One is what the body needs to stand somewhere; two is what it needs to work
+    // there, since breaking the tile under the feet means knowing what is under that tile.
+    private const int Rings = 2;
+
     private const float Dim = 0.12f;
 
     /// <summary>Dark, with a lamp already in hand.</summary>
@@ -49,21 +58,36 @@ internal sealed class Lamplighter(
     // to use is read off the hand, so none of it has to be remembered.
     private const float Lit = 0.8f;
 
-    public void Raise()
+    // Carrying something that would help, as well as needing it. Blind with an empty bag
+    // is not a tick worth taking: holding up nothing reveals nothing, and a body that kept
+    // taking the tick for it would stand in the dark for ever instead of digging out of it.
+    //
+    // Said either way, because an empty bag and a light that works look identical in a log
+    // that only records success. A run stood swinging at a cell it could not see for twenty
+    // seconds and the whole of what it said about light was nothing.
+    public bool Blind
     {
-        if (!Hidden)
+        get
         {
-            return;
-        }
+            if (!Hidden)
+            {
+                return false;
+            }
 
-        int lamp = Lamp();
-        if (lamp <= 0)
-        {
-            return;
-        }
+            int lamp = Lamp();
+            journal.Change("raising", lamp <= 0
+                ? $"nothing to hold up at ({Here.X}, {Here.Y}): torches "
+                    + $"{_bag.Carrying(Lights.Dark)}, wet lights {_bag.Carrying(Lights.Wet)}, "
+                    + $"submerged {_body.Submerged}"
+                : $"{Names.Item(lamp)} at ({Here.X}, {Here.Y}): "
+                    + $"light here {_terrain.Brightness(Here.X, Here.Y):0.00}, "
+                    + $"was holding {Names.Item(_hand.Held)}");
 
-        _bag.Hold(lamp);
+            return lamp > 0;
+        }
     }
+
+    public void Raise() => _bag.Hold(Lamp());
 
     /// <summary>What to hold up where the body is, or zero when nothing carried will do.</summary>
     // Water is the whole of the difference. A torch goes out the moment the body goes
@@ -104,14 +128,19 @@ internal sealed class Lamplighter(
     // One ring, not a radius. Rock two cells deep is unlit whatever is carried, since
     // nothing shines through rock, so a wider question is one that can never be answered
     // yes and asks for a torch for ever.
+    // Two rings and not one. Breaking the tile under the feet means knowing what is under
+    // that tile, so the ground has to be read a cell further out than the body stands. Asked
+    // one ring, a body at the face of a tunnel it had just cut saw everything touching it,
+    // never counted as blind, never held the torch up, and could not legally break anything:
+    // a whole run went by without one line saying it had raised a light.
     private bool Hidden
     {
         get
         {
             Rectangle body = Hitbox.Fills(_body.Footing);
-            for (int x = body.Left - 1; x <= body.Right; x++)
+            for (int x = body.Left - Rings; x <= body.Right + Rings - 1; x++)
             {
-                for (int y = body.Top - 1; y <= body.Bottom; y++)
+                for (int y = body.Top - Rings; y <= body.Bottom + Rings - 1; y++)
                 {
                     if (!_terrain.IsKnown(x, y))
                     {
@@ -141,9 +170,18 @@ internal sealed class Lamplighter(
             return;
         }
 
-        journal.Change("lighting", $"putting one at ({site.X}, {site.Y}): "
+        // Through Note rather than Change, and with what the hand did. A refused placement
+        // and one that has not landed yet read the same, and the same site chosen three
+        // times over is a torch that never went down: a deduplicated line cannot show that
+        // at all, since the text is identical every time.
+        journal.Note("lighting", $"putting one at ({site.X}, {site.Y}): "
             + $"light here {_terrain.Brightness(Here.X, Here.Y):0.00}, "
-            + $"spendable {_bag.Spendable(ItemID.Torch)}");
+            + $"spendable {_bag.Spendable(ItemID.Torch)}, "
+            + $"holding {Names.Item(_hand.Held)}, withheld {_hand.Blocked}, "
+            + $"still swinging {_hand.Busy}, "
+            + $"cell {_terrain.KindAt(site.X, site.Y)} "
+            + $"type {_terrain.TypeAt(site.X, site.Y)}, "
+            + $"game aims at ({_hand.Targeted.X}, {_hand.Targeted.Y})");
         _hand.Aim(site.X, site.Y);
         _hand.Use();
     }
@@ -186,7 +224,14 @@ internal sealed class Lamplighter(
                 // Water puts a torch out, and Terraria refuses the placement rather than
                 // wasting it, silently, which reads from here as a swing that has not
                 // landed yet: the same puddle, for ever.
-                if (!_terrain.Buildable(site.X, site.Y) || _terrain.Wet(site.X, site.Y))
+                // A torch where a block is going stops the block going: the cell reads as
+                // taken, Terraria refuses the placement without a word, and the follower
+                // presses it for ever. A run lit its own pillar and then stood at the foot
+                // of it until it died. Where the route means to dig, a torch is only
+                // destroyed, which is a wasted torch rather than a wedged run.
+                if (!_terrain.Buildable(site.X, site.Y) || _terrain.Wet(site.X, site.Y)
+                    || _pilot.CellsToFill.Contains(site)
+                    || _pilot.CellsToBreak.Contains(site))
                 {
                     continue;
                 }

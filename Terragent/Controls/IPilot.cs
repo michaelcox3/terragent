@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 using Terragent.Pathfinding;
 
 namespace Terragent.Controls;
@@ -24,6 +25,19 @@ internal interface IPilot
     // For drawing. The plan as the search returned it, so what is on screen is what the
     // body is actually working from rather than a second guess at it.
     Route? Route { get; }
+
+    /// <summary>Cells the route in hand will put a block into.</summary>
+    // Apart from what it will break, because they are opposite and the difference is the
+    // whole point of asking. Something standing where a block is going stops the block
+    // going; something standing where the route will dig is only destroyed.
+    //
+    // Worked out here, where the route lives, rather than by whoever wants to know: a
+    // second reading of the steps drifts from this one the moment a step gains a field.
+    // Rebuilt when the route is, so it can be asked every tick without walking anything.
+    IReadOnlySet<Point> CellsToFill { get; }
+
+    /// <summary>Cells the route in hand will break a tile out of.</summary>
+    IReadOnlySet<Point> CellsToBreak { get; }
 
     /// <summary>The way to whichever of these it reaches soonest, or null when none.</summary>
     // One search over all of them. Asked before choosing, so that a job is picked by what

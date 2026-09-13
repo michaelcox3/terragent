@@ -23,6 +23,10 @@ internal sealed class Pilot(
     private Destination? _destination;
     private Route? _route;
 
+    /// <summary>The cells of the route in hand, kept in step with it.</summary>
+    private readonly HashSet<Point> _toFill = [];
+    private readonly HashSet<Point> _toBreak = [];
+
     /// <summary>Which step of the route is being walked.</summary>
     private int _step;
 
@@ -48,6 +52,29 @@ internal sealed class Pilot(
     public int Walked => _step;
 
     public Route? Route => _route;
+
+    public IReadOnlySet<Point> CellsToFill => _toFill;
+
+    public IReadOnlySet<Point> CellsToBreak => _toBreak;
+
+    /// <summary>Take down what the route means to do to the ground.</summary>
+    private void Read(Route? route)
+    {
+        _toFill.Clear();
+        _toBreak.Clear();
+        foreach (Step step in route?.Steps ?? [])
+        {
+            if (step.Puts is { } put)
+            {
+                _toFill.Add(put);
+            }
+
+            foreach (Point cell in step.Removes)
+            {
+                _toBreak.Add(cell);
+            }
+        }
+    }
 
     public void Tick()
     {
@@ -119,6 +146,7 @@ internal sealed class Pilot(
     {
         _destination = site;
         _route = route;
+        Read(route);
         _step = 0;
         Progress = Progress.Idle;
         Plan(site, route);
@@ -158,6 +186,7 @@ internal sealed class Pilot(
         // is not; a follower wants the way as far as it goes, walks it, and asks again from
         // further along. That is how sixty tiles of tunnel get planned twenty at a time.
         _route = _navigator.FindRoute(at, [destination], Ability())?.Route;
+        Read(_route);
         if (_route is { } drawn)
         {
             Plan(destination, drawn);
@@ -472,6 +501,8 @@ internal sealed class Pilot(
     private void Forget()
     {
         _route = null;
+        _toFill.Clear();
+        _toBreak.Clear();
         _step = 0;
     }
 }

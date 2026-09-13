@@ -74,7 +74,7 @@ public sealed class AgentPlayer : ModPlayer
             sites, new Drops(terrain), new Creatures(terrain), clock, journal);
 
         _agent = new Agent(progression, new Foreman(body, pilot, clock, journal),
-            new Lamplighter(terrain, bag, hand, sites, body, journal), terrain, journal);
+            new Lamplighter(terrain, bag, hand, sites, body, pilot, journal), terrain, journal);
     }
 
     /// <summary>One tick of playing, at the point the game reads the controls.</summary>
