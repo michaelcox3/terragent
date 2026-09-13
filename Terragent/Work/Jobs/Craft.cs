@@ -125,11 +125,21 @@ internal sealed class Craft(
                 new TileTarget(floor),
                 new Destination(floor)
                 {
-                    // In reach and out of the way, which are different questions. A body
-                    // that stops inside the cell the bench goes in has arrived at
-                    // somewhere it cannot place from, and the swing is refused in silence.
+                    // Three questions, and they are not the same box. The hand reaches
+                    // further than crafting does, so standing where the station can be put
+                    // down is not standing where it can be used: a run reached four rows
+                    // under a spot, built a furnace into the ceiling and could not craft at
+                    // the thing it had just built. And a body inside the cell the station
+                    // goes in has arrived somewhere it cannot place from at all, with the
+                    // swing refused in silence.
+                    //
+                    // Asked together so one footing serves the placing and the crafting,
+                    // rather than placing from here and walking somewhere else afterwards.
+                    // Where no footing answers all three the station is still built, by the
+                    // branch below, once one is standing to walk to.
                     Arrived = footing =>
                         _hand.CanUseFrom(footing, spot.At.X, spot.At.Y)
+                        && Navigator.Reached(footing, spot.At, Across, Below)
                         && !covers.Intersects(Hitbox.Fills(footing)),
                 });
         }
