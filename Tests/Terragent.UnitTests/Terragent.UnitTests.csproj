@@ -44,6 +44,7 @@
     <Compile Include="..\..\Terragent\World\ITerrain.cs" />
     <Compile Include="..\..\Terragent\World\TileKind.cs" />
     <Compile Include="..\..\Terragent\World\Ground.cs" />
+    <Compile Include="..\..\Terragent\World\Prospect.cs" />
     <Compile Include="..\..\Terragent\World\CraftingRecipe.cs" />
     <Compile Include="..\..\Terragent\World\RecipeNode.cs" />
     <Compile Include="..\..\Terragent\World\NeededItem.cs" />
@@ -64,6 +65,7 @@
     <Compile Include="CostsTests.cs" />
     <Compile Include="SpotTests.cs" />
     <Compile Include="HitboxTests.cs" />
+    <Compile Include="ProspectTests.cs" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Terragent.Controls;
 using Terragent.Pathfinding;
@@ -27,27 +28,32 @@ internal sealed class Explore(
     private readonly ISites _sites = sites;
     private readonly IBody _body = body;
 
-    /// <summary>How far out to look for the edge of the map, in tiles.</summary>
-    private const int Far = 100;
+    /// <summary>How many columns out to look for the edge of the map.</summary>
+    private const int ColumnsOut = 100;
 
-    /// <summary>How far past a footing to check for the dark.</summary>
-    private const int Look = 2;
+    /// <summary>How far past a footing the dark has to start for it to be an edge.</summary>
+    private const int LookAhead = 2;
 
-    /// <summary>How far above and below the body to sweep at each distance.</summary>
+    /// <summary>How far above and below the body to sweep at each column.</summary>
     // A hill of forty tiles is an ordinary hill, and the ground a hundred tiles away is
     // rarely at the height you are standing at.
-    private const int Climb = 40;
+    private const int RowsEitherSide = 40;
+
+    /// <summary>How many edges of the dark are enough to choose between.</summary>
+    // A cap and not a budget. The sweep runs outward, so these are the near ones, and the
+    // hundred and first is not going to win a ratio the first forty already lost.
+    private const int MostEdges = 40;
 
     /// <summary>The two ways out of anywhere.</summary>
-    private static readonly int[] Sideways = [-1, 1];
+    private static readonly int[] LeftThenRight = [-1, 1];
 
     /// <summary>Rows to try either side of the body's own, nearest first.</summary>
-    private static readonly int[] Rows = Spread();
+    private static readonly int[] RowsNearestFirst = NearestRowsFirst();
 
-    private static int[] Spread()
+    private static int[] NearestRowsFirst()
     {
         List<int> rows = [0];
-        for (int away = 1; away <= Climb; away++)
+        for (int away = 1; away <= RowsEitherSide; away++)
         {
             rows.Add(away);
             rows.Add(-away);
@@ -98,54 +104,18 @@ internal sealed class Explore(
         // as much of it as its budget allows.
         if (band is { } layer && Layers.At(from.Y) != layer)
         {
-            Offer? shaft = Aim(from, new Point(from.X, Layers.EntryRow(layer)));
+            Offer? shaft = OfferUnlessArrived(from,
+                new Point(from.X, Layers.EntryRow(layer)));
             if (shaft is not null)
             {
                 return shaft;
             }
         }
 
-        // Nearest first, and that ordering is the whole of the job's judgement. Furthest
-        // first is a rule that undoes itself: walking toward the far edge makes it the near
-        // one, so the edge behind becomes furthest and the body turns round. A run watched
-        // doing this paced between two frontiers twenty tiles apart until it was killed.
-        //
-        // Nearest survives the body moving toward it, because moving toward the nearest
-        // thing leaves it the nearest thing. It also ends: arriving lights the dark behind
-        // it, that ground stops being a frontier, and the next one out is what gets picked.
-        // Every trip spends some of the dark, and there is only so much of it.
-        for (int ring = 1; ring <= Far; ring++)
+        Offer? worth = BestEdgeOfTheDark(from);
+        if (worth is not null)
         {
-            foreach (int way in Sideways)
-            {
-                // A column at that distance, not the one tile level with the body. The
-                // edge of a revealed map is roughly upright, so a sweep across it crosses
-                // it, and a sweep along the body's own row only does on flat ground.
-                //
-                // Outward from the body's own row rather than down from the top of the
-                // sweep. Top down takes the shallowest frontier of the eighty it looks at,
-                // which is the one furthest from where the body is standing and the most
-                // rows of climbing to reach.
-                foreach (int down in Rows)
-                {
-                    Point at = new(from.X + (ring * way), from.Y + down);
-                    if (!Frontier(at, way) || !Inside(at))
-                    {
-                        continue;
-                    }
-
-                    // Past the edge and into the dark, not the last lit tile before it.
-                    // Stopping on the near side leaves the cells beyond unseen, so the same
-                    // ground is still a frontier on the next tick and the run stands there
-                    // picking it again.
-                    Point dark = new(at.X + (Look * way), at.Y);
-                    Offer? beyond = Aim(from, dark);
-                    if (beyond is not null)
-                    {
-                        return beyond;
-                    }
-                }
-            }
+            return worth;
         }
 
         // Nothing standable borders the dark, which is every body enclosed in rock: the
@@ -156,17 +126,77 @@ internal sealed class Explore(
         // So aim at the dark itself. A point in rock is not a place to walk to, it is a
         // place to dig to, and the search prices its own digging: it tunnels as far as its
         // budget reaches and arriving asks for the next stretch.
-        return Digging(from);
+        return OfferNearestUnseenCell(from);
     }
 
-    /// <summary>Somewhere to head toward the nearest unseen cell, standable or not.</summary>
-    // Nearest, as the sweep above is, and for the same reason: it is the only ordering that
-    // survives the body walking toward its own answer. The difference is that this one will
-    // take ground nobody can stand on, so it cuts through a wall where the sweep looks for
-    // a way round one.
-    private Offer? Digging(Point from)
+    /// <summary>The edge of the dark that opens the most ground for the least walking.</summary>
+    // Nearest used to be the whole of the judgement, and nearest is not a measure of
+    // anything: it read as the nearest column and then the nearest row within it, so forty
+    // rows straight down at one column across beat two columns across at eye level, and
+    // left and down won every tie. A run spent itself cutting a staircase under its own
+    // feet, one tile at a time, because the tile one column left is always dark and always
+    // the answer.
+    //
+    // What is worth walking to is how much dark a trip opens against what the trip costs.
+    // A single dark tile beside a lit tunnel opens almost nothing however close it is, and
+    // a cave mouth twenty tiles along opens a room. The ratio also keeps the body honest
+    // about distance without a rule saying so: twice as far has to show twice the dark.
+    //
+    // Arrived at rather than approached, and with nothing to spare on the arrival. A point
+    // in the dark is somewhere the body may only get near, so the job never finishes; and
+    // the light travels with the body, so three tiles short of an edge lights nothing past
+    // it. Getting there is what spends the dark and makes the next answer a different one.
+    private Offer? BestEdgeOfTheDark(Point from)
     {
-        for (int ring = 1; ring <= Far; ring++)
+        List<Point> edges = [];
+
+        // Outward a column at a time, so the ones near the body are found first and the
+        // sweep can stop soon after it has enough to choose between. The order no longer
+        // decides anything, which is the point: the score does.
+        for (int ring = 1; ring <= ColumnsOut && edges.Count < MostEdges; ring++)
+        {
+            foreach (int way in LeftThenRight)
+            {
+                // A column at that distance, not the one tile level with the body. The
+                // edge of a revealed map is roughly upright, so a sweep across it crosses
+                // it, and a sweep along the body's own row only does on flat ground.
+                foreach (int down in RowsNearestFirst)
+                {
+                    Point at = new(from.X + (ring * way), from.Y + down);
+                    if (BordersTheDark(at, way) && InTheBand(at))
+                    {
+                        edges.Add(at);
+                    }
+                }
+            }
+        }
+
+        return edges.Count == 0 ? null
+            : OfferUnlessArrived(from,
+                edges.MaxBy(at =>
+                    Prospect.Unseen(_terrain, at) / Prospect.Reaching(_terrain, from, at)),
+                within: 0);
+    }
+
+    /// <summary>Somewhere to head toward the unseen ground, standable or not.</summary>
+    // For a body with rock on every side, where the sweep above matches nothing because
+    // nothing it can stand on borders anything. A point in rock is not a place to walk to,
+    // it is a place to dig to, and the search prices its own digging: it tunnels as far as
+    // its budget reaches and arriving asks for the next stretch.
+    //
+    // Gathered and weighed rather than answered with the first one seen. Taking the first
+    // made the compass the whole of the decision: the rings are walked from the left column
+    // downward, everything above a body is ground it has already come through, so the first
+    // unseen cell in that walk is the one just under its own row, on its left. Every time,
+    // in every world, for no reason anybody chose.
+    //
+    // Worth against cost as the sweep does it, then the flattest of what ties, since in
+    // solid rock every direction is equally dark and the ratio has nothing to say. A run
+    // that has to tunnel blind may as well tunnel along the band it was sent to.
+    private Offer? OfferNearestUnseenCell(Point from)
+    {
+        List<Point> dark = [];
+        for (int ring = 1; ring <= ColumnsOut && dark.Count < MostEdges; ring++)
         {
             for (int across = -ring; across <= ring; across++)
             {
@@ -181,21 +211,21 @@ internal sealed class Explore(
                     }
 
                     Point at = new(from.X + across, from.Y + down);
-                    if (_terrain.IsKnown(at.X, at.Y) || !Inside(at))
+                    if (!_terrain.IsKnown(at.X, at.Y) && InTheBand(at)
+                        && OfferUnlessArrived(from, at) is not null)
                     {
-                        continue;
-                    }
-
-                    Offer? toward = Aim(from, at);
-                    if (toward is not null)
-                    {
-                        return toward;
+                        dark.Add(at);
                     }
                 }
             }
         }
 
-        return null;
+        return dark.Count == 0 ? null
+            : OfferUnlessArrived(from, dark
+                .OrderByDescending(at =>
+                    Prospect.Unseen(_terrain, at) / Prospect.Reaching(_terrain, from, at))
+                .ThenBy(at => System.Math.Abs(at.Y - from.Y))
+                .First());
     }
 
     // Nothing to do on arrival. Walking there is what reveals the map.
@@ -214,9 +244,10 @@ internal sealed class Explore(
     // a point three columns off is outside a radius of three and inside that box: two tests
     // that each look right then answer "worth going" and "already there" on the same tick,
     // and the run stands still choosing the same spot sixty times a second.
-    private static Offer? Aim(Point from, Point site)
+    private static Offer? OfferUnlessArrived(Point from, Point site,
+        int within = Destination.Slack)
     {
-        Destination to = new(site, Destination.Slack);
+        Destination to = new(site, within);
         return to.Reached(from) ? null : new Offer(new TileTarget(site), to);
     }
 
@@ -226,13 +257,13 @@ internal sealed class Explore(
     // sweep would pick a frontier above it, the body would climb to it, and arriving there
     // the band rule would find itself out of the band and dig a fresh shaft back down. Mine
     // down, pillar up, mine down somewhere else, for as long as it was left running.
-    private bool Inside(Point at) =>
+    private bool InTheBand(Point at) =>
         band is not { } layer || Layers.At(at.Y) == layer;
 
     /// <summary>Whether this is ground to stand on with something unseen beyond it.</summary>
     // Beyond in the direction being walked, not in any direction. Every cave wall has the
     // unknown behind it, and standing next to one reveals nothing.
-    private bool Frontier(Point at, int way) =>
-        _terrain.Standable(at) && !_terrain.IsKnown(at.X + (Look * way), at.Y);
+    private bool BordersTheDark(Point at, int way) =>
+        _terrain.Standable(at) && !_terrain.IsKnown(at.X + (LookAhead * way), at.Y);
 
 }
