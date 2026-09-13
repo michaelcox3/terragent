@@ -179,6 +179,55 @@ public class NavigatorTests
             "the only way across floods the corridor, so there is no way across");
     }
 
+    /// <summary>Two floors, joined only by digging through the floor between them.</summary>
+    // The near way down is two tiles of sand, the far way is two tiles of stone ten columns
+    // along, and the goal sits directly under the sand. Everything else is rock no pickaxe
+    // in the game will cut, so there is no third way.
+    private static string[] Plugs(string near) =>
+    [
+        "HHHHHHHHHHHHHHHHHH",
+        "H................H",
+        "H................H",
+        "H@...............H",
+        "HHHH" + near + "HHHHHHHH##HH",
+        "H................H",
+        "H................H",
+        "H...G............H",
+        "HHHHHHHHHHHHHHHHHH",
+    ];
+
+    /// <summary>Sand collapses into the hole it is dug from, so it is worth walking round.</summary>
+    [Fact]
+    public void ARouteGoesTheLongWayRoundRatherThanCutSand()
+    {
+        Grid grid = new(true, Plugs("ss"));
+
+        Route? round = new Navigator(grid).FindRoute(
+            Standing(grid, grid.Find('@')),
+            [new Destination(Floor(grid, grid.Find('G')), Within: 0)],
+            new Ability(Prices, PickPower, Jump, 0))?.Route;
+
+        Assert.NotNull(round);
+        Assert.DoesNotContain(round.Steps,
+            step => step.Removes.Any(cell => grid.Falls(cell.X, cell.Y)));
+    }
+
+    /// <summary>The same picture in stone, to show the detour is the sand and not the shape.</summary>
+    [Fact]
+    public void TheSameWayDownInStoneIsTakenRatherThanWalkedRound()
+    {
+        Grid grid = new(true, Plugs("##"));
+
+        Route? through = new Navigator(grid).FindRoute(
+            Standing(grid, grid.Find('@')),
+            [new Destination(Floor(grid, grid.Find('G')), Within: 0)],
+            new Ability(Prices, PickPower, Jump, 0))?.Route;
+
+        Assert.NotNull(through);
+        Assert.Contains(through.Steps,
+            step => step.Removes.Contains(new Point(4, 4)));
+    }
+
     public static IEnumerable<object[]> CaseNames => Scenarios.All.Select(test => new object[] { test.Name });
 
     [Theory]

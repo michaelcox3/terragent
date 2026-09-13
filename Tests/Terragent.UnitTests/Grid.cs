@@ -101,7 +101,7 @@ internal sealed class Grid : ITerrain
 
     public TileKind KindAt(int x, int y) => At(x, y) switch
     {
-        '#' or 'X' or 'H' or 'd' => TileKind.Solid,
+        '#' or 'X' or 'H' or 'd' or 's' => TileKind.Solid,
 
         // A work bench: not solid, but standable on top, which is a platform.
         '=' or 'B' => TileKind.Platform,
@@ -140,6 +140,9 @@ internal sealed class Grid : ITerrain
     public bool Wet(int x, int y) => HasWater(x, y) || HasLava(x, y);
 
     public bool HasWater(int x, int y) => At(x, y) == 'w';
+
+    /// <summary>Sand, as far as a picture is concerned.</summary>
+    public bool Falls(int x, int y) => At(x, y) == 's';
 
     public bool HasLava(int x, int y) => At(x, y) == 'L';
 

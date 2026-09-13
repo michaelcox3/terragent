@@ -36,6 +36,15 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     /// <summary>Sideways and straight down, which is how a fall begins.</summary>
     private static readonly int[] Downward = [-1, 0, 1];
 
+    /// <summary>What a cell nobody has seen is worth over one that has been.</summary>
+    private const float BlindCost = 1.5f;
+
+    /// <summary>What a cell that collapses is worth over one that stays put.</summary>
+    // Dear enough that a way round is worth a good few tiles of walking, and never a wall:
+    // a desert has nothing under it but more sand, and refusing it outright would leave a
+    // run standing on top of one with nowhere to be.
+    private const float FallingCost = 4f;
+
     /// <summary>Longest route the rebuild will walk back before giving up.</summary>
     private const int MaxRoute = 8192;
 
@@ -520,7 +529,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     }
 
                     cut.Add(new Point(x, row));
-                    doubt = Math.Max(doubt, Uncertainty(x, row));
+                    doubt = Math.Max(doubt, Premium(x, row));
                 }
 
                 if (sealed_)
@@ -821,7 +830,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     }
 
                     cut.Add(cell);
-                    doubt = Math.Max(doubt, Uncertainty(cell.X, cell.Y));
+                    doubt = Math.Max(doubt, Premium(cell.X, cell.Y));
                 }
             }
         }
@@ -927,9 +936,17 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         cell.X >= footing.X && cell.X < footing.X + Hitbox.Width
         && cell.Y <= footing.Y - 1 && cell.Y >= footing.Y - Hitbox.Height;
 
-    /// <summary>The premium for digging blind.</summary>
-    private float Uncertainty(int x, int y) =>
-        _terrain.KindAt(x, y) is TileKind.Unknown ? 1.5f : 1f;
+    /// <summary>What digging this particular cell is worth over an ordinary one.</summary>
+    // Two kinds of bad cell, and a step pays the worse of whatever it cuts.
+    private float Premium(int x, int y)
+    {
+        if (_terrain.Falls(x, y))
+        {
+            return FallingCost;
+        }
+
+        return _terrain.KindAt(x, y) is TileKind.Unknown ? BlindCost : 1f;
+    }
 
     private static List<Step> Rebuild(Dictionary<Point, (Point From, Step Step)> cameFrom,
         Point start, Point last)

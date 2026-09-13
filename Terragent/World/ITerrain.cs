@@ -42,5 +42,10 @@ internal interface ITerrain
 
     bool HasWater(int x, int y);
 
+    /// <summary>Whether this tile falls once what is under it goes.</summary>
+    // Sand and its kin collapse into the hole they are dug from, bury the shaft behind the
+    // body and land on its head, so a route through them is worth more than a route round.
+    bool Falls(int x, int y);
+
     bool HasLava(int x, int y);
 }
