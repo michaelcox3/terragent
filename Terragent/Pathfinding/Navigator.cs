@@ -325,6 +325,15 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     {
         bool blind = float.IsPositiveInfinity(costs.FogCost);
 
+        // Water, once nothing carried lights it: a rule and not a price. A price only ranks
+        // one route against another, so where every route to a goal is wet the cheapest is
+        // still wet and the number cancels out. A run walked into a pool that way, drowned
+        // the torch that was its only light, and could not see to leave.
+        //
+        // Off again for a body already in it, which has to be able to move to get out.
+        bool submerged = _terrain.Wet(at);
+        bool keepDry = float.IsPositiveInfinity(costs.IntoWaterCost) && !submerged;
+
         // Inside is asked against this footing, so an answer kept from the last one
         // would be an answer to a different question.
         _fits.Clear();
@@ -354,7 +363,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 _sweep.Clear();
                 _sweep.Add(new Point(at.X, next.Y));
                 _sweep.Add(next);
-                if (Clear(at, _sweep, pickPower, blind, _cut, out float doubt)
+                if (Clear(at, _sweep, pickPower, blind, keepDry, _cut, out float doubt)
                     && Rests(at, next, _cut))
                 {
                     List<Point> cut = _cut;
@@ -375,12 +384,11 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             // Water takes the sideways half of a jump as well as the upward half, and
             // only the rise was ever capped, so a diagonal hop planned while submerged
             // was drawn to a ledge the body could not carry itself to.
-            bool submerged = Wet(at);
             int climb = submerged ? System.Math.Min(leap.Height, WetJumpRows) : leap.Height;
             int span = submerged ? WetJumpColumns : LeapColumns;
             for (int up = 1; up <= climb; up++)
             {
-                if (!Open(at, new Point(at.X, at.Y - up)))
+                if (!Open(at, new Point(at.X, at.Y - up), keepDry))
                 {
                     break;
                 }
@@ -396,7 +404,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 // one footing cost thirty five microseconds.
                 for (int across = 1; across <= span; across++)
                 {
-                    if (!Open(at, new Point(at.X + (dx * across), at.Y - up)))
+                    if (!Open(at, new Point(at.X + (dx * across), at.Y - up), keepDry))
                     {
                         break;
                     }
@@ -425,7 +433,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                         bool fits = true;
                         for (int row = at.Y - up + 1; row <= next.Y && fits; row++)
                         {
-                            fits = Open(at, new Point(next.X, row));
+                            fits = Open(at, new Point(next.X, row), keepDry);
                         }
 
                         // The columns in between, down to the lower of takeoff and
@@ -437,7 +445,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                         {
                             for (int row = at.Y - up + 1; row <= under && fits; row++)
                             {
-                                fits = Open(at, new Point(at.X + (dx * back), row));
+                                fits = Open(at, new Point(at.X + (dx * back), row), keepDry);
                             }
                         }
 
@@ -470,7 +478,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             {
                 _sweep.Clear();
                 _sweep.Add(column);
-                if (!Clear(at, _sweep, pickPower, blind, cut, out doubt))
+                if (!Clear(at, _sweep, pickPower, blind, keepDry, cut, out doubt))
                 {
                     continue;
                 }
@@ -490,12 +498,22 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 {
                     int x = column.X + side;
                     int row = at.Y + down - 1;
+
+                    // Water stops nothing, so the drop goes through it rather than onto it,
+                    // and a body that crosses a pool has been in one.
+                    if (keepDry && _terrain.HasWater(x, row))
+                    {
+                        sealed_ = true;
+                        break;
+                    }
+
                     if (!_terrain.Holds(x, row, trustFog: true))
                     {
                         continue;
                     }
 
-                    if (!_terrain.Diggable(x, row, pickPower))
+                    if (!_terrain.Diggable(x, row, pickPower)
+                        || (keepDry && Spills(new Point(x, row))))
                     {
                         sealed_ = true;
                         break;
@@ -552,7 +570,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 if (!(_terrain.Buildable(put.X, put.Y) || _terrain.Clutter(put.X, put.Y))
                     || !(onOurOwnBridge
                          || _terrain.Holds(put.X - dx, put.Y, trustFog: false))
-                    || !Clear(at, _sweep, pickPower, blind, _cut, out float doubt))
+                    || !Clear(at, _sweep, pickPower, blind, keepDry, _cut, out float doubt))
                 {
                     continue;
                 }
@@ -567,7 +585,6 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     ahead.Add(put);
                 }
 
-
                 float wet = Soak(next, ahead, costs);
                 yield return new Edge(
                     new Step(next, StepKind.Place,
@@ -581,12 +598,12 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         // only upward move that needs nothing from the terrain.
         if (blocks > 0)
         {
-            Point next = new(at.X, at.Y - 1);
-            Point put = new(at.X, at.Y - 1);
-
             // Terraria silently refuses a placement with no neighbour to anchor against,
             // and the follower cannot tell a refusal from a swing that has not landed.
             bool onOurOwnTower = !_terrain.Standable(at);
+
+            Point put = new(at.X, at.Y - 1);
+            Point next = new(at.X, at.Y - 1);
             _sweep.Clear();
             _sweep.Add(next);
             // Buildable, or a cell the body is standing in, which is air by the time the
@@ -599,7 +616,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                  || (Inside(at, put)
                      && _terrain.KindAt(put.X, put.Y) is TileKind.Solid or TileKind.Slab))
                 && (onOurOwnTower || _terrain.Holds(put.X, at.Y, trustFog: false))
-                && Clear(at, _sweep, pickPower, blind, _cut, out float doubt))
+                && Clear(at, _sweep, pickPower, blind, keepDry, _cut, out float doubt))
             {
                 List<Point> above = _cut;
                 if (_terrain.Clutter(put.X, put.Y))
@@ -646,42 +663,20 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         return true;
     }
 
-    /// <summary>Whether a body standing at this footing has any cell in water.</summary>
-    private bool Wet(Point footing)
-    {
-        foreach (Point cell in Hitbox.Cells(footing))
-        {
-            if (_terrain.HasWater(cell.X, cell.Y))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>What a footing costs for putting the head under, as a multiplier.</summary>
-    // A price and never a refusal. What the price is worth saying is in Costs; what is
-    // wet is this file's.
-    //
-    // The head, not the feet: liquid fills from the bottom, so wet feet are a puddle and a
-    // wet head is a swim, where a torch goes out and the terrain with it. Both columns,
-    // because half the body under is still under. Lava is cheaper because it glows; what
-    // ought to make it dear is damage, and there is none yet.
+    /// <summary>What a move made in liquid costs, as a multiplier.</summary>
+    // For a body already in one, which is the only way a wet move gets drawn now: dear, so
+    // the way out is the shortest one. Lava is cheaper because it glows; what ought to make
+    // it dear is damage, and there is none yet.
     private float Soak(Point footing, List<Point>? cut, Costs costs)
     {
-        int head = footing.Y - Hitbox.Height;
-        if (_terrain.HasLava(footing.X, head) || _terrain.HasLava(footing.X + 1, head))
+        if (_terrain.Scalding(footing))
         {
             return costs.LavaCost;
         }
 
-        if (_terrain.HasWater(footing.X, head) || _terrain.HasWater(footing.X + 1, head))
-        {
-            return costs.WaterCost;
-        }
-
-        return cut is not null && Floods(cut) ? costs.WaterCost : 1f;
+        return _terrain.Wet(footing) || (cut is not null && Floods(cut))
+            ? costs.InWaterCost
+            : 1f;
     }
 
     /// <summary>Whether breaking any of these would let a pool in.</summary>
@@ -692,12 +687,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     {
         for (int n = 0; n < cut.Count; n++)
         {
-            Point cell = cut[n];
-            if (_terrain.HasWater(cell.X, cell.Y)
-                || _terrain.HasWater(cell.X - 1, cell.Y)
-                || _terrain.HasWater(cell.X + 1, cell.Y)
-                || _terrain.HasWater(cell.X, cell.Y - 1)
-                || _terrain.HasWater(cell.X, cell.Y + 1))
+            if (Spills(cut[n]))
             {
                 return true;
             }
@@ -705,6 +695,15 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
 
         return false;
     }
+
+    /// <summary>Whether breaking one cell would let a pool into it.</summary>
+    // The cell itself as well as its neighbours: a tile can hold liquid and rock at once.
+    private bool Spills(Point cell) =>
+        _terrain.HasWater(cell.X, cell.Y)
+        || _terrain.HasWater(cell.X - 1, cell.Y)
+        || _terrain.HasWater(cell.X + 1, cell.Y)
+        || _terrain.HasWater(cell.X, cell.Y - 1)
+        || _terrain.HasWater(cell.X, cell.Y + 1);
 
     /// <summary>Whether a footing can be stepped up onto, rather than only landed on.</summary>
     // Either column will do: half a body over a ledge is enough for the game to lift
@@ -744,7 +743,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // What the jump loops actually want. They called Clear and then refused any answer
     // with something to cut, so the digging half of that work was thrown away, and they
     // asked it of every footing walked so far rather than the one just added.
-    private bool Open(Point origin, Point footing)
+    private bool Open(Point origin, Point footing, bool keepDry)
     {
         if (_fits.TryGetValue(footing, out bool known))
         {
@@ -757,7 +756,8 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             for (int dy = 1; dy <= Hitbox.Height && fits; dy++)
             {
                 Point cell = new(footing.X + dx, footing.Y - dy);
-                fits = Inside(origin, cell) || _terrain.Passable(cell.X, cell.Y);
+                fits = (Inside(origin, cell) || _terrain.Passable(cell.X, cell.Y))
+                    && !(keepDry && _terrain.HasWater(cell.X, cell.Y));
             }
         }
 
@@ -769,7 +769,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // footing, so allocations here dominate a search. The caller owns the list and this
     // empties it, for the same reason.
     private bool Clear(Point origin, List<Point> footings,
-        int pickPower, bool blind, List<Point> cut, out float doubt)
+        int pickPower, bool blind, bool keepDry, List<Point> cut, out float doubt)
     {
         cut.Clear();
         doubt = 1f;
@@ -780,6 +780,13 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 for (int dy = 1; dy <= Hitbox.Height; dy++)
                 {
                     Point cell = new(footing.X + dx, footing.Y - dy);
+
+                    // A cell with water in it is not a cell the body may be in.
+                    if (keepDry && _terrain.HasWater(cell.X, cell.Y))
+                    {
+                        return false;
+                    }
+
                     if (Inside(origin, cell) || _terrain.Passable(cell.X, cell.Y))
                     {
                         continue;
@@ -794,6 +801,14 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     // ground, but only while it can light what it opens. Blind, the map
                     // never reveals and it stands there.
                     if (blind && _terrain.KindAt(cell.X, cell.Y) is TileKind.Unknown)
+                    {
+                        return false;
+                    }
+
+                    // Water behind a block arrives the moment the block goes, and the body
+                    // is standing in what it opened. Dry on both sides of the swing and wet
+                    // a tick later is still wet.
+                    if (keepDry && Spills(cell))
                     {
                         return false;
                     }

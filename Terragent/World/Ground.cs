@@ -69,6 +69,47 @@ internal static class Ground
         terrain.Holds(footing.X, footing.Y, trustFog)
         || terrain.Holds(footing.X + Hitbox.Width - 1, footing.Y, trustFog);
 
+    /// <summary>Whether any cell the body fills at this footing holds water.</summary>
+    // Every cell, because Terraria counts a body as wet on any overlap at all, and that is
+    // what puts a torch out and stops the map filling in. Asked of the head alone, a landing
+    // with its chest and legs under counted as dry: a run jumped into a pool it could see,
+    // priced as walking, and stood there blind. Written once here, since three places had
+    // their own answer and only one of them matched the game.
+    //
+    // Indexed rather than over Hitbox.Cells, which yields and would allocate once an edge.
+    public static bool Wet(this ITerrain terrain, Point footing)
+    {
+        for (int across = 0; across < Hitbox.Width; across++)
+        {
+            for (int down = 1; down <= Hitbox.Height; down++)
+            {
+                if (terrain.HasWater(footing.X + across, footing.Y - down))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether any cell the body fills at this footing holds lava.</summary>
+    public static bool Scalding(this ITerrain terrain, Point footing)
+    {
+        for (int across = 0; across < Hitbox.Width; across++)
+        {
+            for (int down = 1; down <= Hitbox.Height; down++)
+            {
+                if (terrain.HasLava(footing.X + across, footing.Y - down))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Whether a footing is where the body would actually come to rest.
     /// </summary>

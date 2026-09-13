@@ -26,14 +26,18 @@ public class NavigatorTests
     private static readonly Leap Jump = new(6, [6, 6, 5, 5, 4, 3, 2]);
 
     /// <summary>What a scenario's moves cost. Water is dear here and passable.</summary>
-    private static readonly Costs Prices = new(Walk, Mine, Place, 10f, 1.5f, 1f);
+    private static readonly Costs Prices = new(Walk, Mine, Place, 10f, 10f, 1.5f, 1f);
 
     /// <summary>The same, for a run carrying nothing that lights under water.</summary>
     // Which is what the game hands the search until a glowstick is made: dear enough that
     // no way round is longer, since a torch goes out down there and the map stops filling
     // in. Dear and not forbidden, so a body that ends up in a pool can still price its way
     // out of one.
-    private static readonly Costs Dry = Prices with { WaterCost = 10000f };
+    private static readonly Costs Dry = Prices with
+    {
+        InWaterCost = 10000f,
+        IntoWaterCost = float.PositiveInfinity,
+    };
 
     /// <summary>A pond with dry ground either side of it, and rock all round.</summary>
     // Filled to the ceiling, because the rule is about the head and not the feet: a pool
@@ -104,13 +108,76 @@ public class NavigatorTests
             new Ability(Dry, PickPower, Jump, 0))?.Route;
 
         Assert.NotNull(over);
-        Assert.DoesNotContain(over.Steps, step => Submerged(grid, step.To));
+        Assert.DoesNotContain(over.Steps, step => grid.Wet(step.To));
     }
 
-    /// <summary>Whether a body standing at this footing would have its head under.</summary>
-    private static bool Submerged(Grid grid, Point footing) =>
-        grid.HasWater(footing.X, footing.Y - Hitbox.Height)
-        || grid.HasWater(footing.X + 1, footing.Y - Hitbox.Height);
+    /// <summary>A shaft from a dry ledge into a cavern whose floor is under water.</summary>
+    // Copied from the run of 2026-09-12 at 16:36, shrunk: the agent stood in its own shaft,
+    // exploring offered the floor of the pool below it as a frontier, and the search walked
+    // it in. Nothing in the cavern is dry, so the only footings that reach the goal are
+    // submerged ones.
+    private static readonly string[] Flooded =
+    [
+        "#..............#",
+        "#..............#",
+        "#@.............#",
+        "####...........#",
+        "####...........#",
+        "####...........#",
+        "####wwwwwwwwww.#",
+        "####wwwwwwwwww.#",
+        "####wwwwwwwwwG.#",
+        "################",
+    ];
+
+    /// <summary>A goal only a submerged body can reach is not reached at all.</summary>
+    // The price was infinity and the route was drawn anyway: a cost only ranks one route
+    // against another, and where every route to a goal is wet the cheapest is still wet.
+    [Fact]
+    public void ARunWithNoWetLightWillNotWalkIntoAPoolToArrive()
+    {
+        Grid grid = new(true, Flooded);
+
+        RouteMatch? reached = new Navigator(grid).FindRoute(
+            Standing(grid, grid.Find('@')),
+            [new Destination(Floor(grid, grid.Find('G')), Within: 0)],
+            new Ability(Dry, PickPower, Jump, 0));
+
+        Assert.False(reached?.Arrives ?? false,
+            "a goal at the bottom of a pool should not be reachable without a wet light");
+        Assert.DoesNotContain(reached?.Route.Steps ?? [], step => grid.Wet(step.To));
+    }
+
+    /// <summary>A dry corridor with a flooded stretch walled off in the middle of it.</summary>
+    // Three rows of headroom, which is the body exactly, and rock that no pickaxe in the
+    // game will cut all round it. So the dam is the only thing breakable and over the top
+    // is not a way round: any route to the far end goes through the water.
+    private static readonly string[] Dammed =
+    [
+        "HHHHHHHHHHHHHH",
+        "H...#wwww#...H",
+        "H...#wwww#...H",
+        "H@..#wwww#..GH",
+        "HHHHHHHHHHHHHH",
+    ];
+
+    /// <summary>Breaking the wall in front of a pool is how a run floods its own shaft.</summary>
+    // The body is dry, the cell is dry, and the water arrives the moment the block goes.
+    // Priced, this was the cheapest way across, and the run drowned its own light standing
+    // in the corridor it had just opened.
+    [Fact]
+    public void ARunWithNoWetLightWillNotCutIntoWaterThatFloodsIt()
+    {
+        Grid grid = new(true, Dammed);
+
+        RouteMatch? reached = new Navigator(grid).FindRoute(
+            Standing(grid, grid.Find('@')),
+            [new Destination(Floor(grid, grid.Find('G')), Within: 0)],
+            new Ability(Dry, PickPower, Jump, 0));
+
+        Assert.False(reached?.Arrives ?? false,
+            "the only way across floods the corridor, so there is no way across");
+    }
 
     public static IEnumerable<object[]> CaseNames => Scenarios.All.Select(test => new object[] { test.Name });
 
@@ -536,7 +603,10 @@ public class NavigatorTests
         {
             foreach (Point cell in step.Removes)
             {
-                if (grid.KindAt(cell.X, cell.Y) is TileKind.Empty)
+                // Clutter is empty as far as the body is concerned and still has to be
+                // broken before a block goes there, so paying for it is not paying for air.
+                if (grid.KindAt(cell.X, cell.Y) is TileKind.Empty
+                    && !grid.Clutter(cell.X, cell.Y))
                 {
                     return $"the route pays to break ({cell.X}, {cell.Y}), which is air";
                 }
