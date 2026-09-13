@@ -76,7 +76,7 @@
         "bow"
       ],
       "item": "Glowstick",
-      "restockAt": 0,
+      "restockAt": 1,
       "ceiling": 1,
       "reserve": 1
     },
