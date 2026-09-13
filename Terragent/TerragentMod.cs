@@ -28,12 +28,27 @@ public sealed class TerragentMod : Mod
     // patch of sky, both of which a person who is already playing has.
     public static ModKeybind? RunScenarios { get; private set; }
 
+    /// <summary>The key that copies the ground the agent is standing in.</summary>
+    // For arguing about a run in somebody's world. What the search plans over is the
+    // player's map rather than the world file, so the only place the ground can be copied
+    // from exactly is the running game.
+    public static ModKeybind? CopyGround { get; private set; }
+
     public override void Load()
     {
         ToggleDriving = KeybindLoader.RegisterKeybind(this, "ToggleDriving", "K");
         ToggleInvulnerable = KeybindLoader.RegisterKeybind(this, "ToggleInvulnerable", "J");
 #if TESTING
         RunScenarios = KeybindLoader.RegisterKeybind(this, "RunScenarios", "L");
+        CopyGround = KeybindLoader.RegisterKeybind(this, "CopyGround", "P");
+
+        // Out of the package, since in game the file is inside the .tmod and not on disk.
+        // The headless harness reads the same file from the repository, so what a case is
+        // is decided once and in one place.
+        Tests.Scenarios.Load(System.Text.Encoding.UTF8.GetString(
+            GetFileBytes(Tests.Scenarios.File)
+            ?? throw new System.IO.FileNotFoundException(
+                $"{Tests.Scenarios.File} is not packed into the mod")));
 #endif
 
         // Read once, here, so a typo in the file throws with the name in it at load rather
@@ -47,5 +62,6 @@ public sealed class TerragentMod : Mod
         ToggleDriving = null;
         ToggleInvulnerable = null;
         RunScenarios = null;
+        CopyGround = null;
     }
 }

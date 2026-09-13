@@ -2,4 +2,5 @@ Keybinds: {
 	ToggleDriving.DisplayName: Toggle Driving
 	ToggleInvulnerable.DisplayName: Toggle Invulnerable
 	RunScenarios.DisplayName: Run Scenarios
+	CopyGround.DisplayName: Copy Ground
 }

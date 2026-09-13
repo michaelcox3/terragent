@@ -144,6 +144,11 @@ public sealed class AgentPlayer : ModPlayer
         {
             Walk(agent);
         }
+
+        if (TerragentMod.CopyGround?.JustPressed == true)
+        {
+            Copy(agent);
+        }
 #endif
 
         if (TerragentMod.ToggleDriving?.JustPressed != true)
@@ -177,6 +182,24 @@ public sealed class AgentPlayer : ModPlayer
         _arena = new Tests.Arena(agent.Foreman.Pilot, agent.Terrain, new Journal(Mod));
         _arena.Start(string.Empty);
         Main.NewText("[Agent] walking the scenarios", Color.LightGreen);
+    }
+#endif
+
+#if TESTING
+    /// <summary>Write the ground around the agent out as a scenario grid.</summary>
+    // The route as well as the two ends, so what the search was looking at when it chose
+    // is in the picture and not just where it started and where it was going.
+    private void Copy(IAgent agent)
+    {
+        string path = Tests.Snapshot.Write(
+            agent.Terrain,
+            new Controls.Inventory(Player).PickPower,
+            World.Hitbox.Footing(Player.position, Player.height),
+            agent.Foreman.Destination?.Site,
+            agent.Foreman.Pilot.Route);
+
+        Mod.Logger.Info($"[ground] copied to {path}");
+        Main.NewText($"[Agent] ground copied to {path}", Color.LightGreen);
     }
 #endif
 
