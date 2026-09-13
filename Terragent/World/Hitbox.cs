@@ -28,12 +28,17 @@ internal static class Hitbox
     /// else.
     /// </summary>
     // The row is the tile the feet rest on, which on a half block or a slope is not the
-    // tile below them; half a pixel of tolerance covers resting exactly on a boundary.
-    // The column is the body's left edge, never its centre. A position and a height
-    // rather than a Player, so perception has no reason to call it.
+    // tile below them. The column is the body's left edge, never its centre. A position and
+    // a height rather than a Player, so perception has no reason to call it.
+    //
+    // A whole pixel of tolerance, because that is what Body.Grounded probes with, and the
+    // two have to agree about the same body. Given half a pixel, feet one pixel above the
+    // tile they are landing on read as grounded and as the row above: a route was drawn for
+    // a body on that row, the feet settled a row lower a frame later, and the first step
+    // went from a one row rise to a two row rise, which nothing can walk.
     public static Point Footing(Vector2 position, int height) => new(
         (int)(position.X / 16f),
-        (int)((position.Y + height + 0.5f) / 16f));
+        (int)((position.Y + height + 1f) / 16f));
 
     /// <summary>The cells the body fills standing at <paramref name="footing"/>.</summary>
     public static IEnumerable<Point> Cells(Point footing)
@@ -88,6 +93,30 @@ internal static class Hitbox
     // last stretch of a pickup is walked in pixels toward the item.
     public static Rectangle Frame(Point footing) => new(
         footing.X * 16, (footing.Y * 16) - PixelHeight, Width * 16, PixelHeight);
+
+    /// <summary>Whether the whole body is inside the two columns a footing names.</summary>
+    // The footing a position rounds to and the footing a body is standing on are not the
+    // same question. Twenty pixels of body in a thirty two pixel pair leaves sixteen places
+    // to put it, and the last three of those hang the far edge into a third column: the
+    // same footing by name, a different tile holding it up and a different ceiling over it.
+    // A jump drawn from the pair the search checked, taken by a body hanging out of it, is
+    // a jump into the rock beside the one that was planned.
+    public static bool Within(Point footing, Rectangle body)
+    {
+        Rectangle columns = Frame(footing);
+        return body.Left >= columns.Left && body.Right <= columns.Right;
+    }
+
+    /// <summary>Which way to press to bring a body inside a footing, zero once it is.</summary>
+    // In pixels, because the sign of a tile difference is zero for every position within
+    // one footing, and that is the whole distance this has to cover.
+    public static int Toward(Point footing, Rectangle body)
+    {
+        Rectangle columns = Frame(footing);
+        return body.Left < columns.Left ? 1
+            : body.Right > columns.Right ? -1
+            : 0;
+    }
 
     /// <summary>Whether a body at this footing overlaps a box, which is how Terraria picks an item up.</summary>
     public static bool Touches(Point footing, Rectangle box) => Frame(footing).Intersects(box);

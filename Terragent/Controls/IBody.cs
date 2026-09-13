@@ -62,6 +62,25 @@ internal interface IBody
     // once per tick: nothing in it changes until the boots do.
     Leap Arc();
 
+    /// <summary>Frames to hold the jump key, to land this far across and this far up.</summary>
+    // A jump goes as far sideways as it stays in the air, and it stays in the air as long
+    // as it climbs, so the length of the press is the whole of the aim. Held to the top of
+    // the arc every time, this body crosses nine and a half tiles where the search planned
+    // six and never touches down on the footing.
+    //
+    // Frames, because frames are what the key is held for. Answered as a height instead, it
+    // had to be turned back into a press by watching the body against a coasting estimate,
+    // and that round trip cost a frame either way: an arc that cleared its landing by two
+    // pixels, against five pixels of climb a frame, missed.
+    //
+    // From the speed the body is actually carrying rather than from a standstill, since by
+    // the time it leaves the ground it has a run up and that is most of the difference
+    // between a 5.97 tile jump and a 9.49 one.
+    // Up and never down, because a jump that lands below where it left is a Fall: the
+    // search reads the landing row from the takeoff row upward, and says so where it does
+    // it. Zero is a level hop and the number only ever grows from there.
+    int HoldFor(int across, int up);
+
     /// <summary>The pixels the body actually fills, which a tile pair only approximates.</summary>
     // Within a footing the body slides, and whether it has risen clear of the cell a block
     // is going into is a question about pixels. Asking the tile pair says yes while the
@@ -71,10 +90,12 @@ internal interface IBody
     /// <summary>Hold left, right, or neither. Minus one, one, or zero.</summary>
     void Walk(int direction);
 
-    /// <summary>Hold the body over the columns the plan put it in.</summary>
-    // Not the sign of a tile difference. A body straddles two columns, so a step that
-    // does not change the footing gives a sign of zero and presses nothing at all: that
-    // is a character standing on the lip of the shaft it just dug, waiting to fall.
+    /// <summary>Park the body on a footing's seam and stop it there.</summary>
+    // For the two steps that need the body still and in the middle: laying a block, which
+    // the game refuses inside the body, and cutting the floor out, which rests the body on
+    // the lip of its own shaft if it is off to one side. Walking to a footing is not one of
+    // them and does not come through here, since this brakes on arrival and a walk wants to
+    // keep what it is carrying.
     //
     // It counter-presses inside the deadband, because arriving is not stopping, and it
     // stays off the key when the speed already carried will coast the rest of the way.
@@ -88,7 +109,7 @@ internal interface IBody
     // the way to the target row overshoots by that much and makes a one tile hop take the
     // same input as a full leap.
     /// <param name="topPixels">The row to arrive at, in pixels.</param>
-    void Leap(float topPixels);
+    void Leap(int frames);
 
     /// <summary>Hold down, which is how a body drops through a platform.</summary>
     void Down();

@@ -22,6 +22,9 @@ internal sealed class Body(Player player) : IBody
     /// <summary>Whether the last tick asked for a jump, so the key can be let go.</summary>
     private bool _jumped;
 
+    /// <summary>Frames the jump key has been held for on this jump.</summary>
+    private int _held;
+
     public Point Footing => World.Hitbox.Footing(_player.position, _player.height);
 
     /// <summary>Whether anything is actually holding the body up.</summary>
@@ -87,18 +90,75 @@ internal sealed class Body(Player player) : IBody
         return new Leap(height, reach);
     }
 
-    /// <summary>Pixels gained sideways in this many frames, accelerating up to the run cap.</summary>
-    private float Sideways(float frames)
+    /// <summary>Pixels of clearance a chosen arc must have over its landing.</summary>
+    // The shortest hold that reaches is the right answer for distance and the wrong one for
+    // height. Whether to let go is decided once a frame and a frame is five pixels of
+    // climb, so an arc that clears its landing by two pixels misses it whenever the release
+    // lands on the wrong side of a frame. A tile is three frames of slop.
+    private const float Clearance = 16f;
+
+    public int HoldFor(int across, int up)
     {
+        float gravity = System.Math.Max(0.01f, Gravity);
+        float coast = JumpSpeed * JumpSpeed / (2f * gravity);
+        float wanted = System.Math.Abs(across) * 16f;
+        float landing = up * 16f;
+
+        // What it is carrying at this instant, which is the honest starting point: the run
+        // up is behind it and the body keeps accelerating through the whole arc.
+        float speed = System.Math.Abs(_player.velocity.X);
+
+        // A hop across one column cannot go too far sideways, so there is nothing to
+        // shorten for and the height is worth having: getting onto a ledge means shuffling
+        // across while above its lip, and every frame of climb given up is a frame there is
+        // not to do it in.
+        if (System.Math.Abs(across) <= 1)
+        {
+            return JumpFrames;
+        }
+
+        // The shortest hold that still gets there. Longer is always further, so the first
+        // one that reaches is the one that overshoots least, and holding the whole fifteen
+        // is what the old code did on every jump.
+        for (int held = 1; held <= JumpFrames; held++)
+        {
+            float top = (held * JumpSpeed) + coast;
+            if (top < landing + Clearance)
+            {
+                continue;
+            }
+
+            float frames = held + (JumpSpeed / gravity)
+                + (float)System.Math.Sqrt(2f * (top - landing) / gravity);
+            // Not speed times time. Terraria steers in the air at the run acceleration, so
+            // a body that leaves the ground below its cap is still gaining while it flies:
+            // read flat, the takeoff speed understates the distance, which asks for more
+            // airtime, which picks a higher hold, and the jump goes long twice over.
+            if (Travelled(speed, frames) >= wanted)
+            {
+                return held;
+            }
+        }
+
+        return JumpFrames;
+    }
+
+    /// <summary>Pixels gained sideways in this many frames, accelerating up to the run cap.</summary>
+    private float Sideways(float frames) => Travelled(0f, frames);
+
+    /// <summary>The same from a speed already carried, which is what a takeoff has.</summary>
+    private float Travelled(float from, float frames)
+    {
+        float start = System.Math.Min(from, RunSpeed);
         if (RunAcceleration <= 0f)
         {
             return RunSpeed * frames;
         }
 
-        float untilTop = RunSpeed / RunAcceleration;
+        float untilTop = (RunSpeed - start) / RunAcceleration;
         return frames <= untilTop
-            ? 0.5f * RunAcceleration * frames * frames
-            : (0.5f * RunAcceleration * untilTop * untilTop)
+            ? (start * frames) + (0.5f * RunAcceleration * frames * frames)
+            : (start * untilTop) + (0.5f * RunAcceleration * untilTop * untilTop)
                 + (RunSpeed * (frames - untilTop));
     }
 
@@ -110,9 +170,6 @@ internal sealed class Body(Player player) : IBody
 
     public Rectangle Frame =>
         new((int)_player.position.X, (int)_player.position.Y, _player.width, _player.height);
-
-    /// <summary>How far the body keeps rising after the jump key is let go, in pixels.</summary>
-    private float CoastPixels => JumpSpeed * JumpSpeed / (2f * System.Math.Max(0.01f, Gravity));
 
     public void Align(Point footing)
     {
@@ -156,7 +213,7 @@ internal sealed class Body(Player player) : IBody
         _player.controlLeft = error < 0f;
     }
 
-    public void Leap(float topPixels)
+    public void Leap(int frames)
     {
         bool grounded = _player.velocity.Y == 0f || _player.wet;
         if (grounded && _jumped)
@@ -164,15 +221,25 @@ internal sealed class Body(Player player) : IBody
             _jumped = false;
             _player.controlLeft = false;
             _player.controlRight = false;
+            _held = 0;
             return;
         }
 
-        if (!grounded && _player.Bottom.Y - topPixels <= CoastPixels * 0.5f)
+        if (grounded)
+        {
+            _held = 0;
+        }
+
+        // Counted, not watched. The press is what shapes the arc, so holding it for the
+        // frames asked for is the whole of the aim: measured instead against how high the
+        // body has climbed, the answer is a frame out either way and a frame is five pixels.
+        if (_held >= frames)
         {
             return;
         }
 
         _player.controlJump = true;
+        _held++;
         _jumped = grounded || _jumped;
     }
 

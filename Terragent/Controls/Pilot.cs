@@ -85,7 +85,16 @@ internal sealed class Pilot(
         }
 
         Point at = _body.Footing;
-        if (destination.Reached(at))
+
+        // Standing there, not passing through. A footing the body is only flying over is
+        // not somewhere it has arrived: a pillar jumped, the footing a row up read as
+        // within reach of the ore, the job stopped travelling and started working, the
+        // block was never laid, and the body fell back out of reach and bounced there.
+        // Advanced already refuses to move a route on in mid air, for the same reason.
+        //
+        // Or floating, since a swimming body is never grounded and would otherwise never
+        // arrive anywhere under water.
+        if ((_body.Grounded || _body.Submerged) && destination.Reached(at))
         {
             Progress = Progress.Arrived;
             return;
@@ -120,8 +129,23 @@ internal sealed class Pilot(
 
     public RouteMatch? FindRoute(IReadOnlyList<Destination> destinations)
     {
+        // Not while falling. A footing is the column pair and the row of floor under it, and
+        // in mid air there is no floor: the footing is whatever the body happens to be
+        // passing, true for one frame. A route drawn from one is a route from somewhere the
+        // body never was, and its first step is impossible the moment it lands. A run
+        // planned a step up from a footing it was falling through, landed a row lower, and
+        // pressed that step for the rest of its life.
+        //
+        // The one place anything asks the search, so the rule is said once. Swimming counts
+        // as settled, since a body in water is never grounded and would plan nothing at all.
+        if (!_body.Grounded && !_body.Submerged)
+        {
+            return null;
+        }
+
         Point from = _body.Footing;
         RouteMatch? reached = _navigator.FindRoute(from, destinations, Ability());
+
         if (reached is not null)
         {
             return reached;
@@ -181,11 +205,10 @@ internal sealed class Pilot(
     private void Search(Point at, Destination destination)
     {
         _step = 0;
-        // The list form, which hands back a partial route as well as an arriving one. The
-        // single form is asked whether there is a way there and answers nothing when there
-        // is not; a follower wants the way as far as it goes, walks it, and asks again from
-        // further along. That is how sixty tiles of tunnel get planned twenty at a time.
-        _route = _navigator.FindRoute(at, [destination], Ability())?.Route;
+
+        // Through the same door the foreman uses, so what may be planned and from where is
+        // decided in one place rather than two that drift.
+        _route = FindRoute([destination])?.Route;
         Read(_route);
         if (_route is { } drawn)
         {
@@ -234,13 +257,24 @@ internal sealed class Pilot(
     }
 
     /// <summary>Whether the body has got where a step was taking it.</summary>
-    // A jump is flown rather than stepped: the body comes down where momentum leaves it,
-    // so landing at or above the row and within a column counts as done. Short of the row
-    // is a failed jump, and that one gets the route drawn again.
-    private static bool Done(Step step, Point at) =>
-        at == step.To
-        || (step.Kind is StepKind.Jump && at.Y <= step.To.Y
-            && System.Math.Abs(at.X - step.To.X) <= 1);
+    // Inside the footing rather than rounded onto it, which Hitbox.Within says why.
+    //
+    // A jump is flown rather than stepped, so it comes down where momentum leaves it and
+    // landing above the row counts. The columns do not: the arc of the step after it was
+    // drawn from this pair, and a body a few pixels short of them is under a different
+    // ceiling. Forgiven a column, a run jumped one short, was waved on, and spent the rest
+    // of itself pressing a jump into the rock overhead.
+    private bool Done(Step step, Point at) =>
+        Hitbox.Within(step.To, _body.Frame)
+        && (step.Kind is StepKind.Jump ? at.Y <= step.To.Y : at.Y == step.To.Y)
+        && Laid(step);
+
+    /// <summary>Whether a step that lays a block has actually laid it.</summary>
+    // Standing on the footing does not prove it. A footing holds if either of the body's
+    // two columns has ground under it, so a pillar can be stood on its neighbour with the
+    // block still missing, and the step would count as done with a hole left in the tower.
+    private bool Laid(Step step) =>
+        step.Puts is not { } put || _terrain.Holds(put.X, put.Y, trustFog: false);
 
     /// <summary>Say so when a step has stopped making ground, and nothing more.</summary>
     // A report and never a decision. It used to strike the edge out of every later search,
@@ -313,9 +347,20 @@ internal sealed class Pilot(
 
         if (step.Kind is StepKind.Jump)
         {
+            // Down beside the footing rather than on it. Nothing steers in the air, so the
+            // correction is a walk across once there is ground under the feet again.
+            if (_body.Grounded && at.Y <= step.To.Y)
+            {
+                journal.Change("sidling", $"onto ({step.To.X}, {step.To.Y}) from "
+                    + $"({at.X}, {at.Y}), left edge {_body.Frame.Left}");
+                _body.Walk(Hitbox.Toward(step.To, _body.Frame));
+                return;
+            }
+
             journal.Change("jumping", $"({at.X}, {at.Y}) to ({step.To.X}, {step.To.Y})");
             _body.Walk(Across(step, at));
-            _body.Leap(Apex(step, at));
+            _body.Leap(_body.HoldFor(
+                step.To.X - _takeoff.X, _takeoff.Y - step.To.Y));
             return;
         }
 
@@ -336,49 +381,29 @@ internal sealed class Pilot(
             return;
         }
 
-        _body.Walk(System.Math.Sign(step.To.X - at.X));
+        _body.Walk(Hitbox.Toward(step.To, _body.Frame));
     }
 
-    /// <summary>The height to hold the jump to, in pixels.</summary>
-    // The landing row when the jump is a climb, so a one tile hop does not take a full
-    // leap: Terraria keeps rising about two tiles after the key is let go, and holding all
-    // the way to the row overshoots by that much.
-    //
-    // Across a gap the landing row says nothing about what the jump needs. A flat jump
-    // starts at the height it is aiming for, so the key was released after a single powered
-    // frame, against a search that prices a jump off a full ascent: the body fell short of
-    // every gap it was asked to cross.
-    //
-    // The whole arc, and not a share of it sized to the distance. The arc table says how
-    // far a full jump carries, and there is no table for a partial one: a jump asked for
-    // five columns out of six rose three rows and came down one column short. The search
-    // prices reach off a full ascent, so performing anything less is performing a different
-    // jump from the one that was planned. It overshoots a narrow gap, and that is the cost
-    // of the model rather than a fault in the following.
-    private float Apex(Step step, Point at)
-    {
-        bool sidestep = System.Math.Abs(step.To.X - _takeoff.X) <= 1;
-        return sidestep
-            ? step.To.Y * 16f
-            : (at.Y - _body.Arc().Height) * 16f;
-    }
 
     /// <summary>Which way to hold during a jump, decided from where it began.</summary>
     // A jump is one action, so it gets one heading. Input that flips as the body crosses
     // the target column makes it fight its own momentum.
     //
-    // A one column hop rises first and steps across at the apex, which is what the search's
+    // A one column hop rises first and steps across at the top, which is what the search's
     // arc assumes; holding the heading from the first frame puts the body under the ledge,
-    // one row up and falling. Across once the head is level with the landing surface,
-    // three rows before the feet, since waiting for the feet to clear the lip leaves no
-    // time to build sideways speed.
+    // one row up and falling.
+    //
+    // Across once the lowest cell is above the landing surface, and not before. The face of
+    // the ledge fills its column for every row below its top, so pressing while any part of
+    // the body is still beside that face only grinds into it: a run rose four rows into the
+    // side of a step it was trying to reach and fell back, over and over.
     private int Across(Step step, Point at)
     {
         int heading = System.Math.Sign(step.To.X - _takeoff.X);
         bool sidestep = System.Math.Abs(step.To.X - _takeoff.X) <= 1;
 
-        return at.X == step.To.X ? 0
-            : sidestep && at.Y - (World.Hitbox.Height - 1) > step.To.Y ? 0
+        return Hitbox.Within(step.To, _body.Frame) ? 0
+            : sidestep && at.Y > step.To.Y ? 0
             : heading;
     }
 
@@ -390,7 +415,25 @@ internal sealed class Pilot(
     {
         foreach (Point cell in step.Removes)
         {
-            if (_terrain.KindAt(cell.X, cell.Y) is not TileKind.Empty)
+            // The cell this step is filling is not an obstruction once it is filled. A step
+            // that books its own target, which happens when a plant stands where the block
+            // goes, otherwise reads its own work as something in the way: the list of cells
+            // to break is fixed when the route is drawn and never edited, so the moment the
+            // block lands the cell holds a tile again and looks exactly like the plant did.
+            // A run laid a block and mined it, four times a second, until it was killed.
+            //
+            // Clutter is the difference. A plant is one of Terraria's cut tiles and a laid
+            // block is not, so what must be cleared first and what was just put there stop
+            // answering alike.
+            if (step.Puts == cell && !_terrain.Clutter(cell.X, cell.Y))
+            {
+                continue;
+            }
+
+            // Anything still standing there, which is not the same as anything solid. A
+            // plant is walked through and will still refuse a block, so a booked one has to
+            // be swung at until it goes rather than skipped for not being in the way.
+            if (_terrain.TypeAt(cell.X, cell.Y) != Terrain.Empty)
             {
                 return cell;
             }
@@ -470,12 +513,31 @@ internal sealed class Pilot(
             // that takes three arcs to lay says so, and a deduplicated line cannot.
             if (_body.Grounded)
             {
+                // What is overhead, because a rise that never gets there looks the same
+                // whatever is stopping it. A run jumped and fell back ten times a second
+                // for a minute and the line could not say whether the ceiling was rock or
+                // fog. Which cells the step meant to break is on the plan line already.
+                List<string> over = [];
+                for (int side = 0; side < Hitbox.Width; side++)
+                {
+                    for (int up = 1; up <= Hitbox.Height; up++)
+                    {
+                        Point cap = new(at.X + side, at.Y - Hitbox.Height - up);
+                        over.Add($"({cap.X},{cap.Y}) {_terrain.KindAt(cap.X, cap.Y)}");
+                    }
+                }
+
                 journal.Note("rising", $"for ({put.X}, {put.Y}) from ({at.X}, {at.Y}), "
-                    + $"bottom {_body.Frame.Bottom} needs {top:0}");
+                    + $"bottom {_body.Frame.Bottom} needs {top:0}, "
+                    + $"overhead {string.Join(" ", over)}");
             }
 
             _body.Align(at);
-            _body.Leap(top);
+
+            // One row, which is all a pillar ever rises: high enough to get the feet out of
+            // the cell the block goes in, and no higher, since every extra frame of climb is
+            // time spent in the air not laying it.
+            _body.Leap(_body.HoldFor(0, 1));
             return;
         }
 
@@ -492,10 +554,18 @@ internal sealed class Pilot(
         // Every attempt, not every distinct one. Whether a block took one swing or five is
         // the whole question about a pillar, and a line that only speaks when its text
         // changes cannot answer it.
+        // What is in the cell, and what is around it. Terraria refuses a placement without
+        // a word for reasons the search does not model, and every one of them looks the
+        // same from here: aimed right, not withheld, nothing happening. A run stood laying
+        // wood into the same cell four times a second and the log could not say what was
+        // in the way.
         journal.Note("laying", $"({put.X}, {put.Y}) from ({at.X}, {at.Y}), "
             + $"bottom {_body.Frame.Bottom}, holding {Names.Item(_hand.Held)}, "
             + $"withheld {_hand.Blocked}, still swinging {_hand.Busy}, "
-            + $"game aims at ({_hand.Targeted.X}, {_hand.Targeted.Y})");
+            + $"game aims at ({_hand.Targeted.X}, {_hand.Targeted.Y}), "
+            + $"cell {_terrain.KindAt(put.X, put.Y)} type {_terrain.TypeAt(put.X, put.Y)}, "
+            + $"above {_terrain.TypeAt(put.X, put.Y - 1)}, "
+            + $"below {_terrain.TypeAt(put.X, put.Y + 1)}");
     }
 
     private void Forget()

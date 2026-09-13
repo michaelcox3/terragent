@@ -47,4 +47,37 @@ public class HitboxTests
     [Fact]
     public void TheRowUnderfootIsNotTheBody() =>
         Assert.False(Bench(Standing.X, Standing.Y).Intersects(Hitbox.Fills(Standing)));
+
+    /// <summary>The body somewhere in a footing, so many pixels in from its left edge.</summary>
+    private static Rectangle Body(int intoTheColumn) => new(
+        (Standing.X * 16) + intoTheColumn,
+        (Standing.Y * 16) - Hitbox.PixelHeight,
+        Hitbox.PixelWidth,
+        Hitbox.PixelHeight);
+
+    /// <summary>
+    /// Twenty pixels of body in a thirty two pixel pair: the last three places to stand
+    /// hang it into a third column, and those are not this footing.
+    /// </summary>
+    // What a stuck run came down on. Rounded to a column the body read as the footing it
+    // was aiming at; measured, it was over the tile beyond it, under a different ceiling,
+    // and the jump drawn from that pair went into rock.
+    [Fact]
+    public void ABodyHangingOutOfAFootingIsNotOnIt()
+    {
+        Assert.True(Hitbox.Within(Standing, Body(0)));
+        Assert.True(Hitbox.Within(Standing, Body(12)));
+        Assert.False(Hitbox.Within(Standing, Body(13)));
+        Assert.False(Hitbox.Within(Standing, Body(-1)));
+    }
+
+    /// <summary>And the way back on is a press, since the tile difference reads zero.</summary>
+    [Fact]
+    public void GettingBackOnAFootingIsMeasuredInPixels()
+    {
+        Assert.Equal(0, Hitbox.Toward(Standing, Body(6)));
+        Assert.Equal(-1, Hitbox.Toward(Standing, Body(13)));
+        Assert.Equal(1, Hitbox.Toward(Standing, Body(-1)));
+        Assert.Equal(1, Hitbox.Toward(Standing, Body(-64)));
+    }
 }
