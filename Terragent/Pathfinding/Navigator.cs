@@ -143,7 +143,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             if (Reached(current, destinations, out int which))
             {
                 return new RouteMatch(which,
-                    new Route(Rebuild(cameFrom, from, current), expanded));
+                    new Route(Rebuild(cameFrom, from, current), from, expanded));
             }
 
             float away = Estimate(current, destinations, costs.WalkCost);
@@ -228,7 +228,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
 
         return new RouteMatch(
             IndexOfNearestDestination(closest, destinations, costs.WalkCost),
-            new Route(Rebuild(cameFrom, from, closest), expanded), Arrives: false);
+            new Route(Rebuild(cameFrom, from, closest), from, expanded), Arrives: false);
     }
 
     /// <summary>Where the destination a footing is nearest to sits in the list.</summary>
