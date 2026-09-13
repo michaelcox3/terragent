@@ -227,6 +227,15 @@ internal sealed class Obtain(
                         Group(digging, TileZones.Nearest(yields, body.Footing.Y));
                     tiles.AddRange(yields);
                     names.Add(Names.Item(itemID));
+
+                    // One journey is enough, and ground wins it. A glowstick is in an
+                    // underground pot and on an ocean jellyfish, and hunting walked the run
+                    // sixty tiles along the surface toward water while the pots sat in the
+                    // band it was already digging through. A tile waits to be broken where
+                    // the map says it is; a creature has to be found alive first. Only the
+                    // travelling is decided here: one already in view is still fought, in
+                    // Trips, which offers every way of taking what is in front of the body.
+                    continue;
                 }
 
                 IReadOnlyList<int> droppers = Loot.Droppers(itemID);
