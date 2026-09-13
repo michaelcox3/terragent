@@ -38,11 +38,13 @@ internal static class Layers
     };
 
     /// <summary>A row worth travelling to in order to look for something in this band.</summary>
-    // Just inside the top of it rather than the middle: the point is to be in the band, and
-    // the shallowest part of it is the cheapest to reach.
+    // The middle. Just inside the top is cheaper to reach and is where a run then spends
+    // itself: arriving at the ceiling of a band leaves everything worth finding below, so
+    // every answer afterwards is a downward one and the body cuts a staircase instead of
+    // walking the band it came for.
     public static int EntryRow(Layer layer)
     {
         (int top, int bottom) = Band(layer);
-        return System.Math.Min(top + 12, bottom);
+        return (top + bottom) / 2;
     }
 }
