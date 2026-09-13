@@ -35,6 +35,8 @@
     <Compile Include="..\..\Terragent\Pathfinding\INavigator.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Navigator.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Route.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Effort.cs" />
+    <Compile Include="..\..\Terragent\Pathfinding\Ending.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\RouteMatch.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Step.cs" />
     <Compile Include="..\..\Terragent\Pathfinding\Costs.cs" />

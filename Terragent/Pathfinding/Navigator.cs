@@ -30,6 +30,11 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // expansion, so it never answers for a footing other than the one being expanded.
     private readonly Dictionary<Point, bool> _fits = [];
 
+    /// <summary>What the search running right now has cost so far.</summary>
+    // Scratch, like the collections above, and for the same reason: the things worth
+    // counting are four calls down and none of them should grow a parameter to say so.
+    private Effort _effort = new();
+
     /// <summary>The two directions a body walks, jumps and bridges in.</summary>
     private static readonly int[] Sideways = [-1, 1];
 
@@ -44,6 +49,21 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // a desert has nothing under it but more sand, and refusing it outright would leave a
     // run standing on top of one with nowhere to be.
     private const float FallingCost = 4f;
+
+    /// <summary>Expansions without getting nearer the goal before a search gives up.</summary>
+    // A share of the budget rather than a number, so a caller that asked for a small search
+    // gives up sooner in proportion.
+    //
+    // A search that is working its way toward something improves on its nearest footing the
+    // whole way: one measured arriving had its last gain at expansion 793 of 887. One that
+    // has run out of cheap ground and is fanning out sideways stops improving and never
+    // starts again: two measured had their last gains at 220 and 124, then spent the
+    // remaining nineteen thousand eight hundred proving it, at a second of game time each.
+    // The gap between the two is wide enough to read, and this sits in the middle of it.
+    private const int StallShare = 20;
+
+    /// <summary>The fewest expansions any search gets before that rule may fire.</summary>
+    private const int LeastPatience = 200;
 
     /// <summary>Longest route the rebuild will walk back before giving up.</summary>
     private const int MaxRoute = 8192;
@@ -143,27 +163,60 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         Point closest = from;
         float nearest = Estimate(from, destinations, costs.WalkCost);
 
+        // The tally, handed out on whatever route comes back. A fresh one per search, so
+        // two searches never share a count, and held here rather than passed down because
+        // the things being counted are four calls deep.
+        _effort = new Effort();
+
+        // Settled once already, which is the only way to tell a re-expansion from a first
+        // look: there is no decrease-key, so a cheaper way to a footing that has been
+        // popped puts it back on the queue.
+        HashSet<Point> settled = [];
+
         frontier.Enqueue(from, nearest);
+        _effort.Generated++;
         int expanded = 0;
+        int patience = Math.Max(LeastPatience, searchBudget / StallShare);
+        bool stalled = false;
 
         while (frontier.Count > 0 && expanded++ < searchBudget)
         {
+            // Nothing has got nearer the goal in a long time, so nothing is going to. What
+            // is left to settle is cheaper than everything that would approach the goal,
+            // which is what being fanned out sideways looks like from in here, and the
+            // answer it would hand back at the end is the one it already has.
+            if (expanded - _effort.Gained > patience)
+            {
+                stalled = true;
+                break;
+            }
+
+            _effort.Peak = Math.Max(_effort.Peak, frontier.Count);
             Point current = frontier.Dequeue();
+            _effort.Expanded = expanded;
+            if (!settled.Add(current))
+            {
+                _effort.Reexpanded++;
+            }
+
             if (Reached(current, destinations, out int which))
             {
+                _effort.Ending = Ending.Arrived;
                 return new RouteMatch(which,
-                    new Route(Rebuild(cameFrom, from, current), from, expanded));
+                    new Route(Rebuild(cameFrom, from, current), from, _effort));
             }
 
             float away = Estimate(current, destinations, costs.WalkCost);
             if (away < nearest)
             {
+                _effort.Gained = expanded;
                 nearest = away;
                 closest = current;
             }
 
             foreach (Edge move in Moves(current, costs, pickPower, blocks, leap))
             {
+                _effort.Edges++;
                 Point next = move.Next;
 
                 // A landing whose only floor is a tile the body has been standing in. That
@@ -232,6 +285,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                 best[next] = candidate;
                 placed[next] = laid;
                 cameFrom[next] = (current, move.Step);
+                _effort.Generated++;
                 frontier.Enqueue(next,
                     candidate + Estimate(next, destinations, costs.WalkCost));
             }
@@ -246,6 +300,9 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         //
         // Null when that place is where the body already is. Nothing about walking helps
         // then, and saying so is a truer answer than a route with no steps in it.
+        _effort.Ending = stalled ? Ending.Stalled
+            : frontier.Count == 0 ? Ending.Exhausted
+            : Ending.Spent;
         if (closest == from)
         {
             return null;
@@ -253,7 +310,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
 
         return new RouteMatch(
             IndexOfNearestDestination(closest, destinations, costs.WalkCost),
-            new Route(Rebuild(cameFrom, from, closest), from, expanded), Arrives: false);
+            new Route(Rebuild(cameFrom, from, closest), from, _effort), Arrives: false);
     }
 
     /// <summary>Where the destination a footing is nearest to sits in the list.</summary>
@@ -793,8 +850,10 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     // asked it of every footing walked so far rather than the one just added.
     private bool Open(Point origin, Point footing, bool keepDry)
     {
+        _effort.Asked++;
         if (_fits.TryGetValue(footing, out bool known))
         {
+            _effort.Remembered++;
             return known;
         }
 
@@ -819,6 +878,7 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
     private bool Clear(Point origin, List<Point> footings,
         int pickPower, bool blind, bool keepDry, List<Point> cut, out float doubt)
     {
+        _effort.Swept++;
         cut.Clear();
         doubt = 1f;
         foreach (Point footing in footings)

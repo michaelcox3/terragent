@@ -14,19 +14,17 @@ namespace Terragent.Pathfinding;
 // it begins: the first step is already one move along. Copying a case out of a world needs
 // the place the search was standing when it drew this, not the place the body had walked
 // to by the time anybody looked.
-/// <param name="Examined">
-/// How many footings the search looked at: milliseconds say a search was slow, this
-/// says whether the ground was hard or the estimate stopped pointing anywhere.
-/// </param>
-internal sealed class Route(List<Step> steps, Point from, int examined = 0)
+/// <param name="effort">What the search cost to find it, counted rather than timed.</param>
+internal sealed class Route(List<Step> steps, Point from, Effort? effort = null)
 {
     /// <summary>The footing this was drawn from.</summary>
     public Point From { get; } = from;
 
-
     /// <summary>Every step as planned.</summary>
     public IReadOnlyList<Step> Steps { get; } = steps;
 
-    /// <summary>What it cost to find, in footings looked at.</summary>
-    public int Examined { get; } = examined;
+    /// <summary>What it cost to find.</summary>
+    // Never null, so a reader never has to ask twice. A route built by hand, which the
+    // tests do, cost nothing and says so.
+    public Effort Effort { get; } = effort ?? new Effort();
 }

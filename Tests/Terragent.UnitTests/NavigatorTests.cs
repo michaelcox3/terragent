@@ -278,6 +278,50 @@ public class NavigatorTests
                 $"block at ({step.Puts!.Value.X}, {step.Puts.Value.Y}) has nothing under it"));
     }
 
+    /// <summary>A wide slab of diggable rock, and the goal behind a wall nothing cuts.</summary>
+    // Everything the body can reach is on the wrong side of the divider, and the slab is
+    // wide enough that settling all of it would take many thousands of expansions.
+    private static Grid Walled()
+    {
+        const int Wide = 60;
+        const int Deep = 43;
+        List<string> rows = [new string('X', Wide + 13)];
+        for (int y = 1; y <= Deep; y++)
+        {
+            // The pocket sits near the divider, so the few columns of digging that get any
+            // nearer are used up at once and the rest of the slab yields nothing at all.
+            string left = y >= Deep - 2
+                ? new string('#', Wide).Remove(53, 2).Insert(53, "..")
+                : new string('#', Wide);
+            rows.Add("X" + left + "X" + new string('.', 10) + "X");
+        }
+
+        rows.Add(new string('X', Wide + 13));
+        return new Grid(true, [.. rows]);
+    }
+
+    /// <summary>A search that has stopped getting nearer gives up rather than spending out.</summary>
+    // Measured in a run: a search that arrives keeps improving on its nearest footing right
+    // to the end, and one that is fanning out sideways stops improving in the first couple
+    // of hundred expansions and then spends a second of game time proving it.
+    [Fact]
+    public void ASearchThatStopsGettingNearerGivesUp()
+    {
+        Grid grid = Walled();
+
+        RouteMatch? reached = new Navigator(grid).FindRoute(
+            new Point(54, 44),
+            [new Destination(new Point(65, 44), Within: 0)],
+            new Ability(Prices, PickPower, Jump, 0));
+
+        Assert.NotNull(reached);
+        Assert.False(reached.Arrives, "the goal is behind rock no pickaxe cuts");
+        Assert.Equal(Ending.Stalled, reached.Route.Effort.Ending);
+        Assert.True(reached.Route.Effort.Expanded < 4000,
+            $"gave up after {reached.Route.Effort.Expanded} expansions, "
+            + $"last gain at {reached.Route.Effort.Gained}");
+    }
+
     public static IEnumerable<object[]> CaseNames => Scenarios.All.Select(test => new object[] { test.Name });
 
     [Theory]

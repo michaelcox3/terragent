@@ -144,7 +144,21 @@ internal sealed class Pilot(
         }
 
         Point from = _body.Footing;
+        long began = System.Diagnostics.Stopwatch.GetTimestamp();
         RouteMatch? reached = _navigator.FindRoute(from, destinations, Ability());
+
+        // Every search, whoever asked for it. The follower and the foreman both come
+        // through this door and only one of them writes a route line, so a search that is
+        // slow for the other one is otherwise invisible. A frame is sixteen milliseconds,
+        // which is the number to read this against.
+        //
+        // Timestamps and not the clock: the clock counts frames, a search runs inside one,
+        // and the reading would be the same at both ends of it.
+        if (destinations.Count > 0)
+        {
+            journal.Note("search", Cost(reached, Since(began))
+                + $", from ({from.X}, {from.Y}) to {destinations.Count} of them");
+        }
 
         if (reached is not null)
         {
@@ -218,10 +232,34 @@ internal sealed class Pilot(
 
         journal.Change("route", _route is { } route
             ? $"({at.X}, {at.Y}) to ({destination.Site.X}, {destination.Site.Y}) "
-                + $"in {route.Steps.Count} steps, {route.Examined} footings looked at"
+                + $"in {route.Steps.Count} steps, {route.Effort.Expanded} footings looked at"
             : $"no way from ({at.X}, {at.Y}) to ({destination.Site.X}, "
                 + $"{destination.Site.Y}) with a pickaxe of {_bag.PickPower}");
     }
+
+    /// <summary>What a search cost, as one line.</summary>
+    // Counts and time together. Counts alone cannot see an expansion getting dearer, and
+    // time alone cannot tell that from the search doing more work; the microseconds each
+    // is the number that separates the two.
+    private static string Cost(RouteMatch? reached, double spent)
+    {
+        if (reached?.Route.Effort is not { } effort)
+        {
+            return $"nothing in {spent:0.0} ms";
+        }
+
+        return $"{effort.Ending.ToString().ToLowerInvariant()} after {effort.Expanded} "
+            + $"expanded in {spent:0.0} ms "
+            + $"({spent * 1000 / System.Math.Max(1, effort.Expanded):0.0} us each), "
+            + $"{effort.Generated} queued, {effort.Reexpanded} again, peak {effort.Peak}, "
+            + $"{effort.Edges} moves, {effort.Asked} fits ({effort.Remembered} remembered), "
+            + $"{effort.Swept} sweeps, last gain at {effort.Gained}";
+    }
+
+    /// <summary>Milliseconds since a timestamp, for saying how long something took.</summary>
+    private static double Since(long began) =>
+        (System.Diagnostics.Stopwatch.GetTimestamp() - began) * 1000.0
+        / System.Diagnostics.Stopwatch.Frequency;
 
     /// <summary>What this body can do, as the search needs to hear it.</summary>
     // Read at the moment a search starts, so a route is priced for the pickaxe actually
