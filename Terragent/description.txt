@@ -1,5 +1,5 @@
-BETA. This is a work in progress and it does not finish a playthrough yet. Expect it to
-get stuck, wander, and make poor decisions.
+BETA. This is a WORK IN PROGRESS and it does not finish a playthrough yet. Expect it to
+get stuck, wander, and make poor decisions. I'm actively working to improve the AI.
 
 An agent that plays Terraria with classical AI rather than a neural network. It searches
 for routes over what the body can stand on, works out what to gather and craft from a
