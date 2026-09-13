@@ -50,24 +50,29 @@ builds the mod and writes the package into tModLoader's `Mods` directory. It fai
 while tModLoader is running, because the game holds the package open.
 
 To run unattended, `Terragent/Tests/launch.ps1 "<flag>"` writes the flag, starts the
-game and clicks past the no-audio panel; the game plays and exits. The flag picks what
-runs: `run` for every pathing scenario, one scenario's name for just that one, `combat`
-for the fights, or `drive <seconds>` for a timed free play driven by the progression
-graph. Adding `fresh` anywhere in the flag makes a never-played character and world,
-which is the only run that says anything about a start. Each run writes a JSON-lines
-journal under `tModLoader-Logs/agent/` with every search, route, decision and stall.
+game and clicks past the no-audio panel; the game plays and exits. The flag is either a
+number of seconds to play for, driven by the progression graph, or `arena` to walk the
+pathfinding scenarios, optionally followed by text a scenario's name must contain. An
+arena run enters whichever world and character are already saved, since it builds its own
+ground in the sky and does not care what is underneath.
+
+Everything the agent decides goes to the mod's own log under `tModLoader-Logs`: what it
+chose and from how many offers, the whole route it planned as moves and coordinates,
+every block mined and laid, and every step that stopped making ground.
 
 ## Tests
 
 ```
-Terragent/Tests/launch.ps1 "run"      # every pathing scenario
-Terragent/Tests/launch.ps1 "combat"   # the fights
+dotnet test Tests/Terragent.UnitTests   # the search alone, against written grids
+Terragent/Tests/launch.ps1 "arena"      # the same cases, walked in a real world
 ```
 
-There is no headless harness. Every scenario builds real tiles in a real world and is
-walked by the real follower, scored on arrival, on which kinds of move it made, and on
-whether it ever stood still. A scenario states yes or no on each of walk, jump, mine and
-build; "expect anything" is not available.
+Two levels over one list of scenarios, so the two cannot disagree about what a case is.
+The headless tests run the search on its own and assert on exact plans. The arena stamps
+the same cases as real tiles in the sky above a loaded world and hands them to the agent's
+own pilot, scoring arrival, which kinds of move were made, and whether it ever stood
+still. A scenario states yes or no on each of walk, jump, mine and build; "expect
+anything" is not available.
 
 ## Contributing
 
