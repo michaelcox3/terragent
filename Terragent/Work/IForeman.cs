@@ -53,6 +53,12 @@ internal interface IForeman
     /// <summary>The pilot it is sending, so the panel can say how the travelling goes.</summary>
     IPilot Pilot { get; }
 
+    /// <summary>Let go of the job in hand and the travelling being done for it.</summary>
+    // The three reasons above are its own. This is the fourth and it comes from outside:
+    // whoever is running the agent has stopped it, and what it was in the middle of is not
+    // worth picking up again from wherever the body ends up.
+    void Drop();
+
     /// <summary>One tick: choose if there is nothing in hand, then travel or work.</summary>
     // Travel or work, never both. Arrival is the pilot's answer, and a job that swung
     // while still walking would swing at whatever it passed.

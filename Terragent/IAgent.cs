@@ -17,7 +17,17 @@ internal interface IAgent
     /// <summary>Whether the agent is playing. False leaves the keys alone.</summary>
     // Off by default. A mod that starts playing the moment it loads cannot be watched, and
     // the first thing anyone wants is to stand still and read the panel.
-    bool Driving { get; set; }
+    bool Driving { get; }
+
+    /// <summary>Take the controls, or give them back.</summary>
+    // A command and not an assignment, because handing them back is work: the job in hand
+    // and everything the pilot drew for it are let go of. Left standing, the route, the
+    // step it was on and the cells it booked to break are all still there when the
+    // controls come back, drawn for a body that has been walked somewhere else since.
+    //
+    // Told which way rather than flipped, since the arena wants them off whatever they
+    // were, and a toggle there turns them on half the time.
+    void Drive(bool taking);
 
     /// <summary>What this character has finished, for saving with it.</summary>
     // Passed straight out to the player file. Reached once is reached, and a run that

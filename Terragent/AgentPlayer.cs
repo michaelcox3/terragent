@@ -38,7 +38,12 @@ public sealed class AgentPlayer : ModPlayer
     // result.
     // On to begin with. A run that dies to the first slime says nothing about the plan,
     // and turning it off is a deliberate act rather than the default.
-    internal bool Invulnerable { get; set; } = true;
+    internal bool Invulnerable { get; private set; } = true;
+
+    /// <summary>Turn damage off, or let it back in.</summary>
+    // Through here rather than by assignment, so the keybind and the panel switch cannot
+    // drift apart, and for the same shape as Drive.
+    internal void Protect(bool safe) => Invulnerable = safe;
 
     /// <summary>Build the agent, once this ModPlayer has a character to drive.</summary>
     // Not a field initialiser and not a constructor: tModLoader sets Player after making
@@ -128,7 +133,7 @@ public sealed class AgentPlayer : ModPlayer
 
         if (TerragentMod.ToggleInvulnerable?.JustPressed == true)
         {
-            Invulnerable = !Invulnerable;
+            Protect(!Invulnerable);
             Main.NewText(
                 Invulnerable ? "[Agent] nothing can hurt you" : "[Agent] mortal again",
                 Invulnerable ? Color.LightGreen : Color.LightGray);
@@ -146,7 +151,7 @@ public sealed class AgentPlayer : ModPlayer
             return;
         }
 
-        agent.Driving = !agent.Driving;
+        agent.Drive(!agent.Driving);
         Mod.Logger.Info(agent.Driving ? "[driving] taking the controls"
             : "[driving] you have them back");
         Main.NewText(
@@ -167,8 +172,8 @@ public sealed class AgentPlayer : ModPlayer
             return;
         }
 
-        agent.Driving = false;
-        Invulnerable = true;
+        agent.Drive(false);
+        Protect(true);
         _arena = new Tests.Arena(agent.Foreman.Pilot, agent.Terrain, new Journal(Mod));
         _arena.Start(string.Empty);
         Main.NewText("[Agent] walking the scenarios", Color.LightGreen);

@@ -95,12 +95,12 @@ public sealed class Panel : ModSystem, IPanel
         IAgent? agent = driver.Agent;
         if (_driving.Contains(at) && agent is not null)
         {
-            agent.Driving = !agent.Driving;
+            agent.Drive(!agent.Driving);
             player.mouseInterface = true;
         }
         else if (_invulnerable.Contains(at))
         {
-            driver.Invulnerable = !driver.Invulnerable;
+            driver.Protect(!driver.Invulnerable);
             player.mouseInterface = true;
         }
         else if (_bar.Contains(at))

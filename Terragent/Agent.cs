@@ -18,7 +18,16 @@ internal sealed class Agent(IProgression progression, IForeman foreman,
     private readonly ILamplighter _lamplighter = lamplighter;
     private readonly ITerrain _terrain = terrain;
 
-    public bool Driving { get; set; }
+    public bool Driving { get; private set; }
+
+    public void Drive(bool taking)
+    {
+        Driving = taking;
+        if (!taking)
+        {
+            _foreman.Drop();
+        }
+    }
 
     public IForeman Foreman => _foreman;
 
@@ -46,10 +55,15 @@ internal sealed class Agent(IProgression progression, IForeman foreman,
         _foreman.Objectives = _progression.Active();
         journal.Change("objectives", Said(_foreman.Objectives, _progression.Reached.Count));
 
-        // A lamp in hand first, which costs nothing: whatever works below takes the hand
-        // back for its own tool, so the only ticks this shows on are the ones nothing else
-        // wanted it for.
-        _lamplighter.Raise();
+        // Seeing comes before working, and takes the tick. A pickaxe and a torch are the
+        // same hand, so raising one and then letting the work below take the hand back put
+        // the light away in the frame it came out: the body dug blind, the cell it was
+        // breaking stayed off the map, and the follower swung at it until it was killed.
+        if (_lamplighter.Blind)
+        {
+            _lamplighter.Raise();
+            return;
+        }
 
         // Putting one up is different, and does take the tick. The foreman holds one job
         // and refuses to reconsider, which is what it is for, so a run that walks into a

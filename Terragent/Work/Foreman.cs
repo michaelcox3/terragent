@@ -296,6 +296,7 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
     {
         List<(IJob Job, Offer Offer)> candidates = [];
         List<Destination> destinations = [];
+        long began = System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (IJob job in jobs)
         {
             // Finished work is not work. A hunt whose creature is already in view is done
@@ -316,6 +317,15 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
             offering.Add(job);
             candidates.Add((job, offer));
             destinations.Add(offer.Destination);
+        }
+
+        // What asking every job where it would go costs, which is a different question
+        // from what the search costs and is charged on the same tick. Exploring answers by
+        // sweeping the frontier, so this is where that shows up.
+        if (jobs.Count > 0)
+        {
+            journal.Note("asking", $"{jobs.Count} jobs for somewhere to go in "
+                + $"{Since(began):0.0} ms, {candidates.Count} offered");
         }
 
         // Nothing these offered can be walked to this instant. Nothing is set aside for
@@ -340,6 +350,11 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
         (IJob taken, Offer won) = candidates[reached.Index];
         return new Pick(taken, won.Target, won.Destination, reached.Route);
     }
+
+    /// <summary>Milliseconds since a timestamp, for saying how long something took.</summary>
+    private static double Since(long began) =>
+        (System.Diagnostics.Stopwatch.GetTimestamp() - began) * 1000.0
+        / System.Diagnostics.Stopwatch.Frequency;
 
     /// <summary>What was on offer and what of it had nowhere to work.</summary>
     // Through Change, so it is one line per distinct set. The count alone said seven jobs
@@ -372,7 +387,7 @@ internal sealed class Foreman(IBody body, IPilot pilot, IClock clock, IJournal j
             : "the site stopped being work"));
     }
 
-    private void Drop()
+    public void Drop()
     {
         Job = null;
         Target = null;

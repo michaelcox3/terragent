@@ -144,7 +144,7 @@ public sealed class Runner : ModSystem
                     return;
                 }
 
-                walker.Driving = false;
+                walker.Drive(false);
                 Arena = new Tests.Arena(walker.Foreman.Pilot, walker.Terrain,
                     new Report.Journal(_mod!));
                 Arena.Start(_only);
@@ -169,7 +169,7 @@ public sealed class Runner : ModSystem
                     return;
                 }
 
-                agent.Driving = true;
+                agent.Drive(true);
                 _until = DateTime.UtcNow.AddSeconds(_seconds);
                 _phase = Phase.Driving;
                 Say("driving", $"as {Main.LocalPlayer.name} in {Main.worldName}");
