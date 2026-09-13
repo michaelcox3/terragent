@@ -228,6 +228,56 @@ public class NavigatorTests
             step => step.Removes.Contains(new Point(4, 4)));
     }
 
+    /// <summary>A one tile gap in the floor, with room above it.</summary>
+    // Given as a footing rather than drawn with a marker, since a marker has to stand on
+    // ground and the whole case is a body half over a hole.
+    private static readonly string[] Lip =
+    [
+        "HHHHHHHHHH",
+        "H........H",
+        "H........H",
+        "H........H",
+        "H........H",
+        "H........H",
+        "H........H",
+        "H........H",
+        "HHHH.HHHHH",
+        "HHHHHHHHHH",
+    ];
+
+    /// <summary>A tower rises from the column that is holding the body up.</summary>
+    // The body stands at (4, 8) on the strength of its right column alone: nothing is under
+    // the left one. Built in the left one the block hangs in mid air, which Terraria refuses
+    // without a word, so the search used to refuse the whole move instead and the body had
+    // to shuffle onto solid ground before it could build at all. Half over a drop is an
+    // ordinary place to stand, and the first step from one should be the tower.
+    [Fact]
+    public void APillarRisesFromTheColumnThatIsHoldingTheBodyUp()
+    {
+        Grid grid = new(true, Lip);
+        Point lip = new(4, 8);
+
+        Assert.True(grid.Standable(lip), "the body stands here");
+        Assert.False(grid.Holds(lip.X, lip.Y, trustFog: false),
+            "on its right column, with nothing under its left");
+
+        Route? up = new Navigator(grid).FindRoute(
+            lip,
+            [new Destination(new Point(5, 4), Within: 0)],
+            new Ability(Prices, PickPower, Jump, 20))?.Route;
+
+        Assert.NotNull(up);
+        Assert.Equal(StepKind.Place, up.Steps[0].Kind);
+        Assert.Equal(new Point(5, 7), up.Steps[0].Puts);
+        Assert.All(
+            up.Steps.Where(step => step.Puts is not null),
+            step => Assert.True(
+                grid.Holds(step.Puts!.Value.X, step.Puts.Value.Y + 1, trustFog: false)
+                || up.Steps.Any(laid => laid.Puts
+                    == new Point(step.Puts.Value.X, step.Puts.Value.Y + 1)),
+                $"block at ({step.Puts!.Value.X}, {step.Puts.Value.Y}) has nothing under it"));
+    }
+
     public static IEnumerable<object[]> CaseNames => Scenarios.All.Select(test => new object[] { test.Name });
 
     [Theory]

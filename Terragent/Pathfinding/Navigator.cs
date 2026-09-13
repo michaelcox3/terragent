@@ -188,6 +188,22 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
                     continue;
                 }
 
+                // The other way round, and the same mistake: a tower whose first block is
+                // going onto ground this route has already cut away. The anchor is read off
+                // the world when the move is built, which is the world before any of the
+                // plan happens. A run walked a step whose head room took the very tile its
+                // next block was to stand on, rose, swung at mid air and came down on the
+                // same tile, four times a second until it was killed.
+                //
+                // A tower only, which is a block going a row above the feet. A bridge lays
+                // beside them and holds on sideways, so what is under it was never the
+                // question.
+                if (move.Step.Puts is { } laying && laying.Y < current.Y
+                    && !Anchored(cameFrom, current, laying))
+                {
+                    continue;
+                }
+
                 // A tile the follower gave up swinging at. Without this the same route
                 // is planned and thrown away every tick. Kept out of Diggable because it
                 // is one character's experience, not a fact about the world.
@@ -611,9 +627,32 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
             // and the follower cannot tell a refusal from a swing that has not landed.
             bool onOurOwnTower = !_terrain.Standable(at);
 
-            Point put = new(at.X, at.Y - 1);
-            Point next = new(at.X, at.Y - 1);
+            // The column the body is actually standing on, which is not always the one the
+            // footing is named after. A footing holds if either of its two columns has
+            // ground under it, so a body on the lip of a ledge stands on its right column
+            // with nothing at all under its left. Built in the left one there, the block
+            // hangs in mid air and the game refuses it without a word: a run rose, swung,
+            // came down on the same tile and did it again until it was killed.
+            //
+            // The footing moves with it. Nothing in a footing says which column a tower is
+            // in, since the body covers the same two at every height, so naming the block's
+            // own column keeps the next step over the last block instead of beside it. Two
+            // pillars in a row that disagree about the column build a staircase of corners,
+            // which the game refuses for the same reason.
+            Point put = new(
+                onOurOwnTower || _terrain.Holds(at.X, at.Y, trustFog: false)
+                    ? at.X
+                    : at.X + Hitbox.Width - 1,
+                at.Y - 1);
+            Point next = put;
             _sweep.Clear();
+
+            // Both footings, because a tower in the right column ends one over from where
+            // the body is now and it has to rise before it can shift across. Asked only of
+            // where it ends up, a rise into a ceiling over its own column reads as clear: a
+            // run bumped its head on the same tile four times a second until it was killed.
+            // The two are the same point whenever the tower is in the left column.
+            _sweep.Add(new Point(at.X, at.Y - 1));
             _sweep.Add(next);
             // Buildable, or a cell the body is standing in, which is air by the time the
             // block goes down whatever the terrain says now: whatever move arrived at this
@@ -869,6 +908,20 @@ internal sealed class Navigator(ITerrain terrain) : INavigator
         }
 
         return false;
+    }
+
+    /// <summary>Whether the ground a block is going onto is still there.</summary>
+    // Asked of the plan and not of the world, which is the whole point: the world still has
+    // the tile, and three steps of this route have gone by since it was counted on.
+    //
+    // Nothing to answer when the world has no ground there anyway. The move was built on
+    // some other footing then, standing on its own tower, and this has no opinion about it.
+    private bool Anchored(Dictionary<Point, (Point From, Step Step)> cameFrom,
+        Point current, Point put)
+    {
+        Point under = new(put.X, put.Y + 1);
+        return !_terrain.Holds(under.X, under.Y, trustFog: false)
+            || Survives(cameFrom, current, under);
     }
 
     /// <summary>Whether this route has laid a block under the body, holding it up.</summary>
