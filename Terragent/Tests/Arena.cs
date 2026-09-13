@@ -213,19 +213,6 @@ internal sealed class Arena(IPilot pilot, ITerrain terrain, IJournal journal)
             return;
         }
 
-        // Characters the arena cannot build honestly. 'X' asks for a tile the game refuses
-        // to break, which nothing can request directly, and '?' asks for fog, which is the
-        // absence of a reading rather than a tile. Built as ordinary stone they would be
-        // different scenarios wearing the same name.
-        foreach (char cell in (char[])['X', '?'])
-        {
-            if (System.Array.Exists(test.Rows, row => row.Contains(cell)))
-            {
-                Skip($"'{cell}' cannot be built; planned only");
-                return;
-            }
-        }
-
         Build(test);
         Stock(test);
 
@@ -387,12 +374,18 @@ internal sealed class Arena(IPilot pilot, ITerrain terrain, IJournal journal)
     /// <summary>One grid character, as tiles.</summary>
     // The same characters the headless grid reads, and they have to mean the same thing
     // here or the two levels are testing different pictures under one name.
+    //
+    // Two of them cannot. 'X' is a tile the game refuses to break for anyone, which nothing
+    // can ask for, and '?' is fog, a cell missing from the map rather than a tile.
+    // Ebonstone stands in for the first, since a copper pickaxe cannot touch it either, and
+    // stone for the second. Both are approximations, so a case that turns on the difference
+    // is answering a different question here, and only the headless suite settles those.
     private void Cell(int x, int y, char cell)
     {
         _pen.Put(x, y, cell switch
         {
-            '#' or 'd' or '_' or '/' or '\\' => TileID.Stone,
-            'H' => TileID.Ebonstone,
+            '#' or 'd' or '_' or '/' or '\\' or '?' => TileID.Stone,
+            'H' or 'X' => TileID.Ebonstone,
             '=' => TileID.Platforms,
             _ => -1,
         });
